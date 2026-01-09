@@ -1,0 +1,97 @@
+# =============================================================================
+# AXCSAS Configuration File
+# Advanced XRD Crystallite Size Analysis System
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Physical Constants (Locked for Academic Consistency)
+# -----------------------------------------------------------------------------
+physical_constants:
+  wavelength: 1.54056          # Å, Cu Kα1 (IUPAC Standard)
+  wavelength_ka2: 1.54439      # Å, Cu Kα2
+  ka2_ratio: 0.5               # I(Kα2) / I(Kα1)
+  
+  # Scherrer constant K (Langford & Wilson, 1978)
+  scherrer_k:
+    spherical: 0.89            # Spherical grains
+    cubic: 0.94                # Cubic grains
+    default: 0.89              # Default assumption
+
+# -----------------------------------------------------------------------------
+# Instrument Parameters (Caglioti Equation)
+# Calibrate using: scripts/calibrate_instrument.py
+# -----------------------------------------------------------------------------
+instrument:
+  # FWHM²_inst = U·tan²θ + V·tanθ + W
+  caglioti:
+    U: null                    # To be calibrated (deg²)
+    V: null                    # To be calibrated (deg²)
+    W: null                    # To be calibrated (deg²)
+  
+  # Standard reference materials
+  standard: "NIST SRM 660c"    # LaB6
+
+# -----------------------------------------------------------------------------
+# Preprocessing Parameters
+# -----------------------------------------------------------------------------
+preprocessing:
+  # Savitzky-Golay Smoothing
+  smoothing:
+    enable: true
+    method: "savgol"
+    window_size: 11            # Must be odd (5-15 recommended)
+    poly_order: 3              # Polynomial order (2-3 recommended)
+  
+  # Background Subtraction
+  background:
+    enable: true
+    method: "chebyshev"        # Options: "chebyshev", "sonneveld_visser"
+    poly_degree: 5             # For Chebyshev method
+  
+  # Kα2 Stripping (Rachinger Correction)
+  kalpha_strip:
+    enable: true
+    method: "rachinger"
+
+# -----------------------------------------------------------------------------
+# Peak Fitting Parameters
+# -----------------------------------------------------------------------------
+fitting:
+  function: "pseudo_voigt"     # Options: "pseudo_voigt", "voigt", "gaussian", "lorentzian"
+  optimizer: "levenberg_marquardt"
+  
+  # Optimization settings
+  max_iterations: 1000
+  tolerance: 1.0e-8
+  
+  # Peak detection
+  peak_detection:
+    method: "second_derivative"
+    min_height: 100            # Minimum peak intensity
+    min_distance: 0.5          # Minimum distance between peaks (deg)
+
+# -----------------------------------------------------------------------------
+# Validation & Error Analysis
+# -----------------------------------------------------------------------------
+validation:
+  # Instrumental broadening correction threshold
+  # When β_obs < threshold × β_inst, result is flagged as unreliable
+  min_broadening_ratio: 1.2
+  
+  # Goodness of fit threshold (%)
+  max_rwp: 10.0
+  
+  # Physical size limits (nm)
+  size_limits:
+    min_reliable: 2            # Below this: precision issues
+    max_reliable: 200          # Above this: exceeds detection limit
+
+# -----------------------------------------------------------------------------
+# Output Settings
+# -----------------------------------------------------------------------------
+output:
+  results_format: "csv"        # Options: "csv", "json", "xlsx"
+  plot_format: "png"           # Options: "png", "svg", "pdf"
+  plot_dpi: 300
+  generate_report: true
+  report_format: "markdown"    # Options: "markdown", "pdf"
