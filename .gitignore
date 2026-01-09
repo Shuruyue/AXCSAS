@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Data directory (contains raw XRD data - not for version control)
+data/
+
 # C extensions
 *.so
 
@@ -76,17 +79,8 @@ venv.bak/
 .DS_Store
 Thumbs.db
 
-# Project specific
-outputs/plots/*.png
-outputs/plots/*.svg
-outputs/results/*.csv
-outputs/results/*.json
-outputs/reports/*.md
-
-# Keep output directories structure
-!outputs/plots/.gitkeep
-!outputs/results/.gitkeep
-!outputs/reports/.gitkeep
+# Project specific - exclude output files
+outputs/
 
 # Temporary files
 *.tmp
