@@ -144,27 +144,63 @@ def fit_peak_with_diagnosis(
                 use_doublet = False
         
         if not use_doublet or not result['success']:
-            # Fallback: standard Pseudo-Voigt (more robust)
-            optimizer = LMOptimizer(max_iterations=1000, tolerance=1e-6)
-            initial_guess = PseudoVoigtParams(
-                center=peak_theta, amplitude=peak_int, fwhm=initial_fwhm, eta=0.5
-            )
-            fit_result = optimizer.fit_single_peak(theta_range, int_range, initial_guess=initial_guess)
+            # Enhanced Pseudo-Voigt fitting with polynomial background
+            from scipy.optimize import least_squares
             
-            if fit_result.success:
+            # Estimate polynomial background (quadratic)
+            n_edge = max(5, len(theta_range) // 8)
+            bg_x = np.concatenate([theta_range[:n_edge], theta_range[-n_edge:]])
+            bg_y = np.concatenate([int_range[:n_edge], int_range[-n_edge:]])
+            bg_coeffs = np.polyfit(bg_x, bg_y, 2)  # Quadratic background
+            
+            # Model: Pseudo-Voigt + quadratic background
+            def enhanced_pv_model(x, center, amplitude, fwhm, eta, a2, a1, a0):
+                pv = PseudoVoigt.profile(x, center, amplitude, fwhm, np.clip(eta, 0, 1))
+                background = a2 * x**2 + a1 * x + a0
+                return pv + background
+            
+            def residual(params):
+                return int_range - enhanced_pv_model(theta_range, *params)
+            
+            # Multi-start optimization for robustness
+            best_r2 = -1
+            best_params = None
+            best_fitted = None
+            
+            # Try multiple initial eta values
+            for eta_init in [0.3, 0.5, 0.7, 0.9]:
+                x0 = np.array([peak_theta, peak_int * 0.9, initial_fwhm, eta_init, 
+                              bg_coeffs[0], bg_coeffs[1], bg_coeffs[2]])
+                
+                lb = np.array([theta_range.min(), 10, 0.03, 0.0, -np.inf, -np.inf, -np.inf])
+                ub = np.array([theta_range.max(), peak_int * 1.5, 3.0, 1.0, np.inf, np.inf, np.inf])
+                
+                try:
+                    opt_result = least_squares(residual, x0, bounds=(lb, ub), 
+                                               max_nfev=5000, ftol=1e-12, xtol=1e-12, gtol=1e-12)
+                    
+                    if opt_result.success or opt_result.status >= 1:
+                        fitted = enhanced_pv_model(theta_range, *opt_result.x)
+                        ss_res = np.sum((int_range - fitted)**2)
+                        ss_tot = np.sum((int_range - np.mean(int_range))**2)
+                        r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0
+                        
+                        if r2 > best_r2:
+                            best_r2 = r2
+                            best_params = opt_result.x
+                            best_fitted = fitted
+                except Exception:
+                    continue
+            
+            if best_params is not None and best_r2 > 0.9:
                 result['success'] = True
-                result['center'] = fit_result.params.center
-                result['amplitude'] = fit_result.params.amplitude
-                result['fwhm'] = fit_result.params.fwhm
-                result['eta'] = fit_result.params.eta
-                result['r_squared'] = fit_result.r_squared
-                result['method'] = 'pseudo-voigt (fallback)'
-                # Generate fitted curve with background
-                bg = np.min(int_range)
-                result['fitted_curve'] = PseudoVoigt.profile(
-                    theta_range, fit_result.params.center, fit_result.params.amplitude,
-                    fit_result.params.fwhm, fit_result.params.eta
-                ) + bg
+                result['center'] = best_params[0]
+                result['amplitude'] = best_params[1]
+                result['fwhm'] = best_params[2]
+                result['eta'] = best_params[3]
+                result['r_squared'] = best_r2
+                result['method'] = 'enhanced-pv'
+                result['fitted_curve'] = best_fitted
     except Exception as e:
         result['error'] = str(e)
     
@@ -259,23 +295,12 @@ def generate_sample_fitting_plot(
                     f"R² = {fit_result['r_squared']:.4f}\n"
                     f"Kα₁ = {center:.3f}°\n"
                     f"FWHM = {fwhm:.4f}°\n"
-                    f"η = {fit_result['eta']:.3f}\n"
-                    f"Amp = {amp:.0f}"
+                    f"η = {fit_result['eta']:.3f}"
                 )
-                
-                # Color-code R² value
-                r2 = fit_result['r_squared']
-                r2_color = 'green' if r2 > 0.95 else ('orange' if r2 > 0.8 else 'red')
                 
                 ax.text(0.02, 0.98, info_text, transform=ax.transAxes,
                        fontsize=9, verticalalignment='top', family='monospace',
                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor='gray'))
-                
-                # R² indicator (prominent)
-                ax.text(0.98, 0.98, f"R²={r2:.3f}", transform=ax.transAxes,
-                       fontsize=12, fontweight='bold', verticalalignment='top',
-                       horizontalalignment='right', color=r2_color,
-                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
                 
                 peaks_info.append({
                     'hkl': hkl,
@@ -283,7 +308,7 @@ def generate_sample_fitting_plot(
                     'center_ka2': center_ka2,
                     'fwhm': fwhm,
                     'eta': fit_result['eta'],
-                    'r_squared': r2,
+                    'r_squared': fit_result['r_squared'],
                 })
             else:
                 ax.text(0.5, 0.5, 'Fitting Failed', transform=ax.transAxes,
