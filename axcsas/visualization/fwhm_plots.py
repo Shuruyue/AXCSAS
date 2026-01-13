@@ -102,8 +102,13 @@ def plot_fwhm_evolution(
 
         if x_values:
             color = get_peak_color(hkl)
-            ax.scatter(x_values, y_values, c=color, s=80, alpha=0.8, edgecolors='black', linewidths=0.5)
-            ax.plot(x_values, y_values, c=color, alpha=0.5, linestyle='--')
+            # Sort by x-value to ensure proper line connection
+            sorted_indices = np.argsort(x_values)
+            x_sorted = np.array(x_values)[sorted_indices]
+            y_sorted = np.array(y_values)[sorted_indices]
+            
+            ax.scatter(x_sorted, y_sorted, c=color, s=80, alpha=0.8, edgecolors='black', linewidths=0.5)
+            ax.plot(x_sorted, y_sorted, c=color, alpha=0.5, linestyle='-', linewidth=1.0)
 
         # Instrument limit line
         if instrument_limit is not None:

@@ -164,18 +164,7 @@ def generate_fwhm_plots(samples: List[SampleData], output_dir: Path) -> int:
     except Exception as e:
         print(f"  ✗ fwhm_evolution_by_peak.png: {e}")
     
-    # Plot 2: FWHM by peak comparison
-    try:
-        fig = plot_fwhm_by_peak(
-            plot_data,
-            output_path=str(output_dir / 'fwhm_by_concentration.png'),
-            show=False,
-            instrument_limit=0.05
-        )
-        count += 1
-        print(f"  ✓ fwhm_by_concentration.png")
-    except Exception as e:
-        print(f"  ✗ fwhm_by_concentration.png: {e}")
+    # Note: fwhm_by_concentration removed per user request
     
     return count
 
