@@ -293,7 +293,7 @@ def generate_sample_fitting_plot(
             if fit_result['success'] and fit_result['fitted_curve'] is not None:
                 # Plot fitted curve
                 ax.plot(fit_result['theta_range'], fit_result['fitted_curve'], 
-                       color=color, linewidth=2.5, label='Doublet Fit', zorder=4)
+                       color=color, linewidth=1.5, label='Fit', zorder=4)
                 
                 # Fill under curve
                 ax.fill_between(
@@ -308,16 +308,16 @@ def generate_sample_fitting_plot(
                 amp = fit_result['amplitude']
                 
                 # Vertical lines at Kα₁ and Kα₂ centers
-                ax.axvline(x=center, color='blue', linestyle='--', alpha=0.7, 
-                          linewidth=1.5, label=f'Kα₁={center:.3f}°')
+                ax.axvline(x=center, color='blue', linestyle='--', alpha=0.6, 
+                          linewidth=1.0, label=f'Kα₁={center:.3f}°')
                 if not np.isnan(center_ka2):
-                    ax.axvline(x=center_ka2, color='orange', linestyle='--', alpha=0.7,
-                              linewidth=1.5, label=f'Kα₂={center_ka2:.3f}°')
+                    ax.axvline(x=center_ka2, color='orange', linestyle='--', alpha=0.6,
+                              linewidth=1.0, label=f'Kα₂={center_ka2:.3f}°')
                 
                 # FWHM indicator
                 half_max = amp / 2 + np.min(fit_result['fitted_curve'])
                 ax.hlines(y=half_max, xmin=center - fwhm/2, xmax=center + fwhm/2,
-                         color='green', linewidth=2.5, label=f'FWHM={fwhm:.4f}°')
+                         color='green', linewidth=1.5, label=f'FWHM={fwhm:.4f}°')
                 
                 # Get uncertainties (with fallbacks)
                 center_err = fit_result.get('center_err', 0.001)
