@@ -22,8 +22,10 @@ STANDARD_PEAK_SEPARATION = 7.136  # degrees
 
 # Warren geometric coefficient for FCC (111)-(200) stacking fault
 # α = (Δ2θ_exp - Δ2θ_std) / G
-# G ≈ -0.5 for FCC metals (Warren, B.E., X-Ray Diffraction, 1969)
-WARREN_G_COEFFICIENT = -0.5
+# Based on design document (Doc 07 §3.3): 0.136° deviation → α ≈ 0.68%
+# Empirical relation: every 0.2° deviation corresponds to α = 1%
+# Therefore: α = deviation / G → 0.01 = -0.2 / G → G = -20
+WARREN_G_COEFFICIENT = -20.0
 
 # Standard lattice constant for Cu
 STANDARD_LATTICE_CONSTANT = 3.6150  # Å
@@ -166,7 +168,7 @@ class StackingFaultAnalyzer:
     Warren formula:
         α = (Δ2θ_exp - Δ2θ_std) / G
         
-    where G ≈ -0.5 for FCC (111)-(200)
+    where G ≈ -20.0 for FCC (111)-(200) when using degrees
     """
     
     def __init__(self, g_coefficient: float = WARREN_G_COEFFICIENT):
@@ -174,7 +176,7 @@ class StackingFaultAnalyzer:
         Initialize stacking fault analyzer.
         
         Args:
-            g_coefficient: Warren geometric coefficient (default: -0.5)
+            g_coefficient: Warren geometric coefficient (default: -20.0)
         """
         self.g_coefficient = g_coefficient
     

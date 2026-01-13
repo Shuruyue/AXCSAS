@@ -45,8 +45,12 @@ class TestConstants:
         assert STANDARD_PEAK_SEPARATION == 7.136
     
     def test_warren_coefficient(self):
-        """Warren G coefficient should be -0.5."""
-        assert WARREN_G_COEFFICIENT == -0.5
+        """Warren G coefficient should be -20.0 (corrected per Doc 07 §3.3).
+        
+        Empirical relation: every 0.2° deviation corresponds to α = 1%
+        Therefore: G = -0.2 / 0.01 = -20
+        """
+        assert WARREN_G_COEFFICIENT == -20.0
     
     def test_standard_lattice_constant(self):
         """Standard Cu lattice constant should be 3.6150 Å."""

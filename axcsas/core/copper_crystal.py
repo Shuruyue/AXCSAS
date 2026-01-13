@@ -194,7 +194,7 @@ def get_k_for_hkl(
         For a cube-shaped crystallite:
         - Viewing along <111>: See hexagonal projection → K = 2/√3 = 1.155
         - Viewing along <100>: See square projection → K = 1.000
-        - Viewing along <110>: See rectangular projection → K = 1/√2 = 0.707
+        - Viewing along <110>: K = 1.061 (updated per 文件 04 §2.2)
         
     Examples:
         >>> get_k_for_hkl(1, 1, 1)  # Cubic habit
@@ -365,7 +365,7 @@ def validate_lattice_constant(measured_a: float) -> LatticeValidationResult:
                 "Consider recording storage time."
             )
         )
-    elif deviation_percent < 0:
+    elif deviation_percent < 0 and deviation_percent >= -0.3:
         return LatticeValidationResult(
             measured_value=measured_a,
             is_normal=False,
@@ -375,6 +375,18 @@ def validate_lattice_constant(measured_a: float) -> LatticeValidationResult:
                 f"Unusual lattice contraction ({deviation_percent:.3f}%). "
                 "May indicate tensile residual stress, measurement error, "
                 "or sample displacement in XRD geometry. Verify instrument alignment."
+            )
+        )
+    elif deviation_percent < -0.3:
+        return LatticeValidationResult(
+            measured_value=measured_a,
+            is_normal=False,
+            deviation_percent=deviation_percent,
+            warning_level="critical",
+            explanation=(
+                f"Extreme lattice contraction ({deviation_percent:.3f}%). "
+                "Possible causes: severe tensile stress, instrument miscalibration, "
+                "sample misalignment, or measurement artifact. Re-examine setup."
             )
         )
     else:

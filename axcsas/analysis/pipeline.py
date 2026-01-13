@@ -49,6 +49,8 @@ from axcsas.analysis.report_generator import (
     generate_csv_summary,
 )
 from axcsas.fitting.hkl_assignment import assign_hkl
+from axcsas.fitting.lm_optimizer import LMOptimizer, FitResult
+from axcsas.fitting.pseudo_voigt import PseudoVoigt, PseudoVoigtParams
 
 
 # =============================================================================
@@ -210,19 +212,30 @@ def parse_filename(filepath: str) -> Dict[str, Any]:
 
 
 # =============================================================================
-# Peak Finding
+# Peak Finding with Pseudo-Voigt Fitting
 # =============================================================================
 
 def find_peak_in_range(
     two_theta: np.ndarray,
     intensity: np.ndarray,
     center: float,
-    window: float = 2.0
+    window: float = 2.0,
+    use_pv_fitting: bool = True
 ) -> Optional[PeakData]:
     """
-    Find peak near expected position.
+    Find peak near expected position using Pseudo-Voigt fitting.
     
-    Returns peak position, intensity, and estimated FWHM.
+    使用 Pseudo-Voigt 擬合找到峰位附近的峰值。
+    
+    Args:
+        two_theta: 2θ array
+        intensity: Intensity array
+        center: Expected peak center position
+        window: Search window (degrees)
+        use_pv_fitting: If True, use Pseudo-Voigt fitting; otherwise use simple method
+        
+    Returns:
+        PeakData with fitted parameters, or None if no peak found
     """
     # Select range
     mask = (two_theta >= center - window) & (two_theta <= center + window)
@@ -232,31 +245,93 @@ def find_peak_in_range(
     theta_range = two_theta[mask]
     int_range = intensity[mask]
     
-    # Find maximum
+    # Find maximum for initial guess
     idx_max = np.argmax(int_range)
     peak_theta = theta_range[idx_max]
     peak_int = int_range[idx_max]
     
-    # Estimate FWHM using half-maximum method
-    half_max = peak_int / 2
+    # Check minimum intensity
+    if peak_int < 50:
+        return None
     
-    # Find left and right crossing points
-    left_idx = idx_max
-    while left_idx > 0 and int_range[left_idx] > half_max:
-        left_idx -= 1
+    # Default values (will be overwritten by fitting)
+    fwhm = 0.2
+    eta = 0.5
+    fit_r_squared = 0.0
+    area = 0.0
     
-    right_idx = idx_max
-    while right_idx < len(int_range) - 1 and int_range[right_idx] > half_max:
-        right_idx += 1
+    if use_pv_fitting:
+        # =====================================================================
+        # Pseudo-Voigt Fitting (Phase 03)
+        # =====================================================================
+        try:
+            optimizer = LMOptimizer(max_iterations=500, tolerance=1e-6)
+            
+            # Create initial guess based on simple FWHM estimate
+            half_max = peak_int / 2
+            left_idx = idx_max
+            while left_idx > 0 and int_range[left_idx] > half_max:
+                left_idx -= 1
+            right_idx = idx_max
+            while right_idx < len(int_range) - 1 and int_range[right_idx] > half_max:
+                right_idx += 1
+            initial_fwhm = max(theta_range[right_idx] - theta_range[left_idx], 0.1)
+            
+            initial_guess = PseudoVoigtParams(
+                center=peak_theta,
+                amplitude=peak_int,
+                fwhm=initial_fwhm,
+                eta=0.5  # Start with mixed Gaussian-Lorentzian
+            )
+            
+            fit_result = optimizer.fit_single_peak(
+                theta_range, int_range, initial_guess=initial_guess
+            )
+            
+            if fit_result.success and fit_result.r_squared > 0.8:
+                # Use fitted parameters
+                peak_theta = fit_result.params.center
+                peak_int = fit_result.params.amplitude
+                fwhm = fit_result.params.fwhm
+                eta = fit_result.params.eta
+                fit_r_squared = fit_result.r_squared
+                
+                # Calculate integrated area from the fit
+                fitted_curve = PseudoVoigt.profile(
+                    theta_range, peak_theta, peak_int, fwhm, eta
+                )
+                try:
+                    area = np.trapezoid(fitted_curve, theta_range)
+                except AttributeError:
+                    area = np.trapz(fitted_curve, theta_range)
+            else:
+                # Fallback to simple method if fitting fails
+                use_pv_fitting = False
+                
+        except Exception:
+            # Fallback to simple method
+            use_pv_fitting = False
     
-    fwhm = theta_range[right_idx] - theta_range[left_idx]
-    fwhm = max(fwhm, 0.05)  # Minimum FWHM
-    
-    # Estimate area (simple trapezoidal)
-    try:
-        area = np.trapezoid(int_range, theta_range)  # NumPy 2.0+
-    except AttributeError:
-        area = np.trapz(int_range, theta_range)  # NumPy < 2.0
+    if not use_pv_fitting:
+        # =====================================================================
+        # Simple Half-Maximum Method (Fallback)
+        # =====================================================================
+        half_max = peak_int / 2
+        
+        left_idx = idx_max
+        while left_idx > 0 and int_range[left_idx] > half_max:
+            left_idx -= 1
+        right_idx = idx_max
+        while right_idx < len(int_range) - 1 and int_range[right_idx] > half_max:
+            right_idx += 1
+        
+        fwhm = theta_range[right_idx] - theta_range[left_idx]
+        fwhm = max(fwhm, 0.05)  # Minimum FWHM (instrument limit)
+        
+        try:
+            area = np.trapezoid(int_range, theta_range)
+        except AttributeError:
+            area = np.trapz(int_range, theta_range)
     
     return PeakData(
         hkl=(0, 0, 0),  # Will be assigned later
