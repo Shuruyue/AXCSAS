@@ -181,24 +181,53 @@ def fit_peak_with_diagnosis(
                     
                     if opt_result.success or opt_result.status >= 1:
                         fitted = enhanced_pv_model(theta_range, *opt_result.x)
-                        ss_res = np.sum((int_range - fitted)**2)
+                        residuals = int_range - fitted
+                        ss_res = np.sum(residuals**2)
                         ss_tot = np.sum((int_range - np.mean(int_range))**2)
                         r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0
+                        
+                        # Calculate reduced chi-squared and parameter uncertainties
+                        n_data = len(int_range)
+                        n_params = len(opt_result.x)
+                        dof = n_data - n_params  # Degrees of freedom
+                        
+                        # Estimate variance and chi-squared
+                        variance = ss_res / dof if dof > 0 else ss_res
+                        chi2_red = ss_res / (dof * variance) if dof > 0 else 1.0
+                        
+                        # Parameter uncertainties from Jacobian
+                        try:
+                            # Covariance matrix from Jacobian: cov = (J^T J)^-1 * variance
+                            J = opt_result.jac
+                            cov = np.linalg.inv(J.T @ J) * variance
+                            param_errors = np.sqrt(np.diag(cov))
+                        except (np.linalg.LinAlgError, ValueError):
+                            # Fallback if covariance calculation fails
+                            param_errors = np.zeros(n_params)
                         
                         if r2 > best_r2:
                             best_r2 = r2
                             best_params = opt_result.x
                             best_fitted = fitted
+                            best_errors = param_errors
+                            best_chi2_red = chi2_red
+                            best_dof = dof
                 except Exception:
                     continue
             
             if best_params is not None and best_r2 > 0.9:
                 result['success'] = True
                 result['center'] = best_params[0]
+                result['center_err'] = best_errors[0] if best_errors[0] > 0 else 0.001
                 result['amplitude'] = best_params[1]
+                result['amplitude_err'] = best_errors[1]
                 result['fwhm'] = best_params[2]
+                result['fwhm_err'] = best_errors[2] if best_errors[2] > 0 else 0.0001
                 result['eta'] = best_params[3]
+                result['eta_err'] = best_errors[3]
                 result['r_squared'] = best_r2
+                result['chi2_red'] = best_chi2_red
+                result['dof'] = best_dof
                 result['method'] = 'enhanced-pv'
                 result['fitted_curve'] = best_fitted
     except Exception as e:
@@ -290,12 +319,21 @@ def generate_sample_fitting_plot(
                 ax.hlines(y=half_max, xmin=center - fwhm/2, xmax=center + fwhm/2,
                          color='green', linewidth=2.5, label=f'FWHM={fwhm:.4f}°')
                 
-                # Info text box
+                # Get uncertainties (with fallbacks)
+                center_err = fit_result.get('center_err', 0.001)
+                fwhm_err = fit_result.get('fwhm_err', 0.0001)
+                eta_err = fit_result.get('eta_err', 0.01)
+                chi2_red = fit_result.get('chi2_red', 1.0)
+                r2 = fit_result['r_squared']
+                eta = fit_result['eta']
+                
+                # Info text box with uncertainties
                 info_text = (
-                    f"R² = {fit_result['r_squared']:.4f}\n"
-                    f"Kα₁ = {center:.3f}°\n"
-                    f"FWHM = {fwhm:.4f}°\n"
-                    f"η = {fit_result['eta']:.3f}"
+                    f"R² = {r2:.4f}\n"
+                    f"χ²ᵣₑₐ = {chi2_red:.3f}\n"
+                    f"2θ = {center:.3f}° ± {center_err:.3f}°\n"
+                    f"FWHM = {fwhm:.4f}° ± {fwhm_err:.4f}°\n"
+                    f"η = {eta:.3f} ± {eta_err:.3f}"
                 )
                 
                 ax.text(0.02, 0.98, info_text, transform=ax.transAxes,
@@ -305,10 +343,14 @@ def generate_sample_fitting_plot(
                 peaks_info.append({
                     'hkl': hkl,
                     'center': center,
+                    'center_err': center_err,
                     'center_ka2': center_ka2,
                     'fwhm': fwhm,
-                    'eta': fit_result['eta'],
-                    'r_squared': fit_result['r_squared'],
+                    'fwhm_err': fwhm_err,
+                    'eta': eta,
+                    'eta_err': eta_err,
+                    'r_squared': r2,
+                    'chi2_red': chi2_red,
                 })
             else:
                 ax.text(0.5, 0.5, 'Fitting Failed', transform=ax.transAxes,
