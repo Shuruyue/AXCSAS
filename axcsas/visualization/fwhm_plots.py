@@ -71,44 +71,57 @@ def plot_fwhm_evolution(
     if n_hkls == 0:
         raise ValueError("No peak data found in input")
 
-    # Create subplots for each hkl
+    # Create subplots for each hkl (square-like aspect)
     n_cols = min(n_hkls, 3)
     n_rows = (n_hkls + n_cols - 1) // n_cols
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+    # Each subplot is 5x5 inches for square aspect
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 5.5*n_rows), squeeze=False)
     axes = axes.flatten()
 
     # X-axis label
     x_labels = {
-        'concentration': 'Leveler Concentration (mL/L)',
-        'time': 'Plating Time (hours)',
+        'concentration': 'Leveler Concentration (mL/1.5L)',
+        'time': 'Annealing Time (hours)',
         'age': 'Sample Age (hours)',
     }
     x_label = x_labels.get(x_param, x_param)
 
+    # Group data by concentration for proper line separation
+    concentrations = sorted(set(sample.get('concentration', 0) for sample in data))
+    colors_by_conc = get_color_palette(len(concentrations))
+    conc_color_map = dict(zip(concentrations, colors_by_conc))
+    
     # Plot each hkl
     for idx, hkl in enumerate(hkl_list):
         ax = axes[idx]
-
-        x_values = []
-        y_values = []
-
-        for sample in data:
-            x_val = sample.get(x_param, sample.get('concentration', 0))
-            for peak in sample.get('peaks', []):
-                if peak['hkl'] == hkl:
-                    x_values.append(x_val)
-                    y_values.append(peak['fwhm'])
-
-        if x_values:
-            color = get_peak_color(hkl)
-            # Sort by x-value to ensure proper line connection
-            sorted_indices = np.argsort(x_values)
-            x_sorted = np.array(x_values)[sorted_indices]
-            y_sorted = np.array(y_values)[sorted_indices]
+        
+        # Plot each concentration separately
+        for conc in concentrations:
+            x_values = []
+            y_values = []
             
-            ax.scatter(x_sorted, y_sorted, c=color, s=80, alpha=0.8, edgecolors='black', linewidths=0.5)
-            ax.plot(x_sorted, y_sorted, c=color, alpha=0.5, linestyle='-', linewidth=1.0)
+            for sample in data:
+                if sample.get('concentration', 0) != conc:
+                    continue
+                x_val = sample.get(x_param, sample.get('time', 0))
+                for peak in sample.get('peaks', []):
+                    if peak['hkl'] == hkl:
+                        x_values.append(x_val)
+                        y_values.append(peak['fwhm'])
+            
+            if x_values:
+                color = conc_color_map[conc]
+                # Sort by x-value for proper line connection
+                sorted_indices = np.argsort(x_values)
+                x_sorted = np.array(x_values)[sorted_indices]
+                y_sorted = np.array(y_values)[sorted_indices]
+                
+                label = f'{conc} mL/1.5L'
+                ax.scatter(x_sorted, y_sorted, c=color, s=60, alpha=0.8, 
+                          edgecolors='black', linewidths=0.5)
+                ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle='-', 
+                       linewidth=2.0, label=label)
 
         # Instrument limit line
         if instrument_limit is not None:
@@ -118,13 +131,25 @@ def plot_fwhm_evolution(
         ax.set_xlabel(x_label)
         ax.set_ylabel('FWHM (°)')
         ax.set_title(f'{hkl} Peak')
-
-        if instrument_limit is not None:
-            ax.legend(loc='upper right', fontsize=9)
+        ax.legend(loc='upper right', fontsize=8, ncol=2)
+        ax.set_box_aspect(1)  # Make subplot square
 
     # Hide unused axes
     for idx in range(len(hkl_list), len(axes)):
         axes[idx].set_visible(False)
+
+    # Set same Y-axis limits for all subplots
+    all_y_values = []
+    for sample in data:
+        for peak in sample.get('peaks', []):
+            if peak['fwhm'] is not None and not np.isnan(peak['fwhm']):
+                all_y_values.append(peak['fwhm'])
+    
+    if all_y_values:
+        y_min = 0
+        y_max = max(all_y_values) * 1.1
+        for ax in axes[:len(hkl_list)]:
+            ax.set_ylim(y_min, y_max)
 
     fig.suptitle('FWHM Evolution by Peak', fontsize=16, fontweight='bold', y=1.02)
     plt.tight_layout()
