@@ -8,7 +8,7 @@ from scipy.optimize import curve_fit, least_squares
 from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass, field
 
-from .pseudo_voigt import PseudoVoigt, PseudoVoigtParams
+from .pseudo_voigt import PseudoVoigt, PseudoVoigtParams, TrueVoigt, VoigtParams
 
 
 @dataclass
@@ -67,16 +67,20 @@ class LMOptimizer:
         two_theta: np.ndarray,
         intensity: np.ndarray,
         initial_guess: Optional[PseudoVoigtParams] = None,
-        peak_idx: Optional[int] = None
+        peak_idx: Optional[int] = None,
+        use_linear_background: bool = True
     ) -> FitResult:
         """
-        Fit a single Pseudo-Voigt peak.
+        Fit a single Pseudo-Voigt peak with linear background.
+        
+        Enhanced model: I(2θ) = PV(2θ) + (slope × 2θ) + intercept
         
         Args:
             two_theta: 2θ array
             intensity: Intensity array
             initial_guess: Initial parameter guess
             peak_idx: Peak index for automatic initial guess
+            use_linear_background: If True, use linear bg; else constant
             
         Returns:
             FitResult object
@@ -94,53 +98,259 @@ class LMOptimizer:
                     two_theta, intensity, peak_idx
                 )
         
-        p0 = initial_guess.to_array()
+        # Estimate background from edges of data
+        n_edge = max(5, len(intensity) // 8)
+        left_bg = np.mean(intensity[:n_edge])
+        right_bg = np.mean(intensity[-n_edge:])
+        left_x = np.mean(two_theta[:n_edge])
+        right_x = np.mean(two_theta[-n_edge:])
         
-        # Parameter bounds
-        bounds = (
-            [two_theta.min(), 0, 0.01, 0],      # Lower bounds
-            [two_theta.max(), np.inf, 5.0, 1]   # Upper bounds
-        )
+        # Linear background: y = slope * x + intercept
+        if right_x != left_x:
+            slope_estimate = (right_bg - left_bg) / (right_x - left_x)
+        else:
+            slope_estimate = 0.0
+        intercept_estimate = left_bg - slope_estimate * left_x
+        
+        # Subtract background estimate from amplitude
+        center_x = initial_guess.center
+        bg_at_center = slope_estimate * center_x + intercept_estimate
+        amplitude_above_bg = max(initial_guess.amplitude - bg_at_center, 100)
+        
+        if use_linear_background:
+            # Parameters: [center, amplitude, fwhm, eta, slope, intercept]
+            p0 = [
+                initial_guess.center,
+                amplitude_above_bg,
+                initial_guess.fwhm,
+                initial_guess.eta,
+                slope_estimate,
+                intercept_estimate
+            ]
+            
+            # Parameter bounds
+            bounds = (
+                [two_theta.min(), 10, 0.02, 0, -np.inf, 0],        # Lower bounds
+                [two_theta.max(), np.inf, 5.0, 1, np.inf, np.inf]  # Upper bounds
+            )
+            
+            # Fitting function with linear background
+            def pv_with_linear_bg(x, c, a, w, e, slope, intercept):
+                return PseudoVoigt.profile(x, c, a, w, e) + slope * x + intercept
+            
+            fit_func = pv_with_linear_bg
+        else:
+            # Parameters: [center, amplitude, fwhm, eta, background]
+            p0 = [
+                initial_guess.center,
+                amplitude_above_bg,
+                initial_guess.fwhm,
+                initial_guess.eta,
+                max(intercept_estimate, 0)
+            ]
+            
+            bounds = (
+                [two_theta.min(), 10, 0.02, 0, 0],
+                [two_theta.max(), np.inf, 5.0, 1, np.inf]
+            )
+            
+            def pv_with_const_bg(x, c, a, w, e, bg):
+                return PseudoVoigt.profile(x, c, a, w, e) + bg
+            
+            fit_func = pv_with_const_bg
         
         try:
             popt, pcov = curve_fit(
-                lambda x, c, a, w, e: PseudoVoigt.profile(x, c, a, w, e),
+                fit_func,
                 two_theta,
                 intensity,
                 p0=p0,
                 bounds=bounds,
-                maxfev=self.max_iterations,
-                ftol=self.tolerance
+                maxfev=self.max_iterations * 2,  # More iterations
+                ftol=self.tolerance,
+                method='trf'  # Trust Region Reflective for better convergence
             )
             
             # Calculate fit quality metrics
-            fitted = PseudoVoigt.profile(two_theta, *popt)
+            fitted = fit_func(two_theta, *popt)
             residuals = intensity - fitted
             
             chi_sq = np.sum(residuals ** 2)
             ss_tot = np.sum((intensity - np.mean(intensity)) ** 2)
             r_sq = 1 - (chi_sq / ss_tot) if ss_tot > 0 else 0
             
+            # Extract Pseudo-Voigt parameters
+            params = PseudoVoigtParams(
+                center=popt[0],
+                amplitude=popt[1],
+                fwhm=popt[2],
+                eta=popt[3]
+            )
+            
+            if use_linear_background:
+                bg_info = f"linear bg: {popt[4]:.2f}x + {popt[5]:.1f}"
+            else:
+                bg_info = f"const bg: {popt[4]:.1f}"
+            
             return FitResult(
-                params=PseudoVoigtParams.from_array(popt),
+                params=params,
                 covariance=pcov,
                 residuals=residuals,
                 chi_squared=chi_sq,
                 r_squared=r_sq,
                 success=True,
-                message="Fit converged"
+                message=f"Fit converged ({bg_info})"
             )
             
         except Exception as e:
+            # Try fallback with simpler model
+            return self._fallback_fit(two_theta, intensity, initial_guess, str(e))
+    
+    def _fallback_fit(
+        self,
+        two_theta: np.ndarray,
+        intensity: np.ndarray,
+        initial_guess: PseudoVoigtParams,
+        original_error: str
+    ) -> FitResult:
+        """Fallback fitting with simpler constant background model."""
+        try:
+            # Simple constant background
+            bg = np.min(intensity)
+            
+            def simple_pv(x, c, a, w, e):
+                return PseudoVoigt.profile(x, c, a, w, e) + bg
+            
+            p0 = [initial_guess.center, initial_guess.amplitude - bg, 
+                  initial_guess.fwhm, initial_guess.eta]
+            bounds = ([two_theta.min(), 0, 0.01, 0], 
+                     [two_theta.max(), np.inf, 5.0, 1])
+            
+            popt, pcov = curve_fit(simple_pv, two_theta, intensity, p0=p0, 
+                                   bounds=bounds, maxfev=500)
+            
+            fitted = simple_pv(two_theta, *popt)
+            residuals = intensity - fitted
+            chi_sq = np.sum(residuals ** 2)
+            ss_tot = np.sum((intensity - np.mean(intensity)) ** 2)
+            r_sq = 1 - (chi_sq / ss_tot) if ss_tot > 0 else 0
+            
             return FitResult(
-                params=initial_guess,
-                covariance=None,
-                residuals=np.zeros_like(intensity),
-                chi_squared=float('inf'),
-                r_squared=0,
-                success=False,
-                message=str(e)
+                params=PseudoVoigtParams.from_array(popt),
+                covariance=pcov, residuals=residuals, chi_squared=chi_sq,
+                r_squared=r_sq, success=True,
+                message=f"Fallback fit (const bg={bg:.1f})"
             )
+        except Exception as e2:
+            return FitResult(
+                params=initial_guess, covariance=None,
+                residuals=np.zeros_like(intensity), chi_squared=float('inf'),
+                r_squared=0, success=False,
+                message=f"Original: {original_error}; Fallback: {str(e2)}"
+            )
+    
+    def fit_voigt(
+        self,
+        two_theta: np.ndarray,
+        intensity: np.ndarray,
+        initial_fwhm: float = 0.3,
+        initial_eta: float = 0.5
+    ) -> FitResult:
+        """
+        Fit using true Voigt profile (convolution of Gaussian and Lorentzian).
+        
+        This is more physically accurate than Pseudo-Voigt.
+        Parameters: [center, amplitude, sigma, gamma, slope, intercept]
+        
+        Args:
+            two_theta: 2θ array
+            intensity: Intensity array
+            initial_fwhm: Initial FWHM estimate
+            initial_eta: Initial Lorentzian fraction estimate
+            
+        Returns:
+            FitResult with FWHM calculated from sigma and gamma
+        """
+        # Find peak
+        peak_idx = np.argmax(intensity)
+        center_init = two_theta[peak_idx]
+        amplitude_init = intensity[peak_idx]
+        
+        # Estimate background
+        n_edge = max(5, len(intensity) // 8)
+        left_bg = np.mean(intensity[:n_edge])
+        right_bg = np.mean(intensity[-n_edge:])
+        left_x = np.mean(two_theta[:n_edge])
+        right_x = np.mean(two_theta[-n_edge:])
+        
+        if right_x != left_x:
+            slope_init = (right_bg - left_bg) / (right_x - left_x)
+        else:
+            slope_init = 0.0
+        intercept_init = left_bg - slope_init * left_x
+        
+        # Convert FWHM and eta to sigma and gamma
+        sigma_init, gamma_init = TrueVoigt.params_from_fwhm(initial_fwhm, initial_eta)
+        
+        # Parameters: [center, amplitude, sigma, gamma, slope, intercept]
+        p0 = [center_init, amplitude_init - (slope_init * center_init + intercept_init),
+              sigma_init, gamma_init, slope_init, intercept_init]
+        
+        bounds = (
+            [two_theta.min(), 10, 0.001, 0.001, -np.inf, 0],
+            [two_theta.max(), np.inf, 2.0, 2.0, np.inf, np.inf]
+        )
+        
+        def voigt_with_bg(x, c, a, sigma, gamma, slope, intercept):
+            return TrueVoigt.profile(x, c, a, sigma, gamma) + slope * x + intercept
+        
+        try:
+            popt, pcov = curve_fit(
+                voigt_with_bg,
+                two_theta,
+                intensity,
+                p0=p0,
+                bounds=bounds,
+                maxfev=self.max_iterations * 3,
+                ftol=self.tolerance,
+                method='trf'
+            )
+            
+            fitted = voigt_with_bg(two_theta, *popt)
+            residuals = intensity - fitted
+            chi_sq = np.sum(residuals ** 2)
+            ss_tot = np.sum((intensity - np.mean(intensity)) ** 2)
+            r_sq = 1 - (chi_sq / ss_tot) if ss_tot > 0 else 0
+            
+            # Calculate total FWHM from sigma and gamma
+            fwhm_total = TrueVoigt.fwhm_from_params(popt[2], popt[3])
+            
+            # Calculate eta equivalent (Lorentzian fraction)
+            fG = 2.0 * popt[2] * np.sqrt(2.0 * np.log(2.0))
+            fL = 2.0 * popt[3]
+            eta_equiv = fL / (fG + fL) if (fG + fL) > 0 else 0.5
+            
+            # Store as PseudoVoigtParams for compatibility
+            params = PseudoVoigtParams(
+                center=popt[0],
+                amplitude=popt[1],
+                fwhm=fwhm_total,
+                eta=eta_equiv
+            )
+            
+            return FitResult(
+                params=params,
+                covariance=pcov,
+                residuals=residuals,
+                chi_squared=chi_sq,
+                r_squared=r_sq,
+                success=True,
+                message=f"Voigt fit (σ={popt[2]:.4f}, γ={popt[3]:.4f})"
+            )
+            
+        except Exception as e:
+            # Fallback to Pseudo-Voigt
+            return self.fit_single_peak(two_theta, intensity)
     
     def fit_multi_peak(
         self,

@@ -16,10 +16,6 @@ from dataclasses import dataclass, field
 from typing import Optional, Tuple, List, Dict, Any
 from pathlib import Path
 import re
-import sys
-
-# Add parent path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from axcsas.methods.scherrer import (
     ScherrerCalculatorEnhanced,
@@ -72,9 +68,12 @@ class AnalysisConfig:
     min_intensity: float = 100  # minimum counts
     
     # Instrumental broadening (Caglioti U, V, W)
+    # Typical empirical values for lab diffractometers (Bruker D8, D2, etc.)
+    # FWHM_inst² = U·tan²θ + V·tanθ + W
+    # With W=0.003, FWHM_inst ≈ 0.055° (typical instrument resolution)
     caglioti_u: float = 0.0
     caglioti_v: float = 0.0
-    caglioti_w: float = 0.01
+    caglioti_w: float = 0.003  # → FWHM_inst = √0.003 ≈ 0.055°
     
     # JCPDS Cu peak positions
     peak_positions: Dict[Tuple[int, int, int], float] = field(default_factory=lambda: {

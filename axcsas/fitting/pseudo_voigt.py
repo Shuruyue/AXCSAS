@@ -1,12 +1,128 @@
 """
 Pseudo-Voigt Function Module
 Implements the Pseudo-Voigt profile function for XRD peak fitting.
+
+Also includes True Voigt profile using scipy.special.voigt_profile.
 """
 
 import numpy as np
 from typing import Tuple, Optional
 from dataclasses import dataclass
+from scipy.special import voigt_profile
 
+
+@dataclass
+class VoigtParams:
+    """Parameters for a true Voigt peak."""
+    center: float       # 2θ center position (degrees)
+    amplitude: float    # Peak amplitude (intensity)
+    sigma: float        # Gaussian width parameter
+    gamma: float        # Lorentzian width parameter (half-width)
+    
+    @property
+    def fwhm_gaussian(self) -> float:
+        """FWHM of Gaussian component."""
+        return 2.0 * self.sigma * np.sqrt(2.0 * np.log(2.0))
+    
+    @property
+    def fwhm_lorentzian(self) -> float:
+        """FWHM of Lorentzian component."""
+        return 2.0 * self.gamma
+    
+    @property
+    def fwhm_total(self) -> float:
+        """Approximate total FWHM using Olivero-Longbothum approximation."""
+        fG = self.fwhm_gaussian
+        fL = self.fwhm_lorentzian
+        return 0.5346 * fL + np.sqrt(0.2166 * fL**2 + fG**2)
+    
+    def to_array(self) -> np.ndarray:
+        """Convert to numpy array [center, amplitude, sigma, gamma]."""
+        return np.array([self.center, self.amplitude, self.sigma, self.gamma])
+    
+    @classmethod
+    def from_array(cls, arr: np.ndarray) -> 'VoigtParams':
+        """Create from numpy array."""
+        return cls(center=arr[0], amplitude=arr[1], sigma=arr[2], gamma=arr[3])
+
+
+class TrueVoigt:
+    """
+    True Voigt profile function (convolution of Gaussian and Lorentzian).
+    
+    V(x; σ, γ) = Re[w(z)] / (σ√(2π))
+    
+    where w(z) is the Faddeeva function and z = (x + iγ) / (σ√2)
+    
+    This is more physically accurate than Pseudo-Voigt for XRD peaks.
+    """
+    
+    @staticmethod
+    def profile(
+        x: np.ndarray,
+        center: float,
+        amplitude: float,
+        sigma: float,
+        gamma: float
+    ) -> np.ndarray:
+        """
+        Calculate true Voigt profile.
+        
+        Args:
+            x: 2θ array
+            center: Peak center position
+            amplitude: Peak amplitude
+            sigma: Gaussian width parameter (σ)
+            gamma: Lorentzian half-width parameter (γ)
+            
+        Returns:
+            Intensity array
+        """
+        # Shift x to be centered at 0
+        x_shifted = x - center
+        
+        # Use scipy's voigt_profile (normalized to unit area)
+        # voigt_profile(x, sigma, gamma) computes the Voigt function
+        v = voigt_profile(x_shifted, sigma, gamma)
+        
+        # Normalize and scale by amplitude
+        # The voigt_profile is normalized, so we scale to match peak amplitude
+        v_max = voigt_profile(0, sigma, gamma)
+        if v_max > 0:
+            return amplitude * (v / v_max)
+        else:
+            return np.zeros_like(x)
+    
+    @staticmethod
+    def fwhm_from_params(sigma: float, gamma: float) -> float:
+        """
+        Calculate total FWHM from sigma and gamma.
+        Uses Olivero-Longbothum approximation.
+        """
+        fG = 2.0 * sigma * np.sqrt(2.0 * np.log(2.0))
+        fL = 2.0 * gamma
+        return 0.5346 * fL + np.sqrt(0.2166 * fL**2 + fG**2)
+    
+    @staticmethod
+    def params_from_fwhm(fwhm: float, eta: float = 0.5) -> Tuple[float, float]:
+        """
+        Estimate sigma and gamma from total FWHM and mixing ratio.
+        
+        Args:
+            fwhm: Total FWHM
+            eta: Lorentzian fraction (0 = Gaussian, 1 = Lorentzian)
+            
+        Returns:
+            (sigma, gamma) tuple
+        """
+        # Approximate split between Gaussian and Lorentzian FWHM
+        fL = eta * fwhm
+        fG = (1 - eta) * fwhm
+        
+        sigma = fG / (2.0 * np.sqrt(2.0 * np.log(2.0))) if fG > 0 else 0.01
+        gamma = fL / 2.0 if fL > 0 else 0.01
+        
+        return sigma, gamma
 
 @dataclass
 class PseudoVoigtParams:

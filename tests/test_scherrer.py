@@ -92,9 +92,9 @@ class TestDocumentExample:
             FWHM_obs = 0.25°
             FWHM_inst = 0.08°
             
-        Expected:
-            β_sample = 0.224°
-            D = 49.0 nm
+        Expected (using quadratic subtraction β_sample = √(β_obs² - β_inst²)):
+            β_sample = √(0.25² - 0.08²) = 0.237°
+            D ≈ 46.3 nm
         """
         result = calculate_scherrer(
             two_theta=43.32,
@@ -103,11 +103,13 @@ class TestDocumentExample:
             use_cubic_habit=True
         )
         
-        # Check sample broadening
-        assert abs(result.fwhm_sample - 0.224) < 0.01
+        # Check sample broadening (quadratic subtraction)
+        # β_sample = √(0.0625 - 0.0064) = √0.0561 = 0.2369
+        assert abs(result.fwhm_sample - 0.237) < 0.01
         
         # Check crystallite size (allow 5% tolerance)
-        assert abs(result.size_nm - 49.0) < 2.5
+        # Size will be smaller due to larger corrected FWHM
+        assert abs(result.size_nm - 46.3) < 2.5
         
         # Check K value used
         assert abs(result.k_factor - 1.155) < 0.01

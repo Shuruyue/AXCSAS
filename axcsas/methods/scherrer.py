@@ -201,13 +201,26 @@ class ScherrerCalculator:
                 warnings.append(f"FWHM ratio {ratio:.2f} < {FWHM_RATIO_THRESHOLD}")
                 is_reliable = False
 
-        # Correct for instrumental broadening (geometric approximation)
-        if fwhm_instrumental > 0 and fwhm_observed > fwhm_instrumental:
-            fwhm_sample = fwhm_observed - (fwhm_instrumental ** 2) / fwhm_observed
+        # Correct for instrumental broadening using quadratic subtraction:
+        # β_sample² = β_observed² - β_instrumental²
+        if fwhm_instrumental > 0:
+            fwhm_sq_diff = fwhm_observed ** 2 - fwhm_instrumental ** 2
+            
+            if fwhm_sq_diff <= 0:
+                # FWHM_obs <= FWHM_inst: physically impossible to extract sample broadening
+                # This means crystallite size is beyond instrument detection limit
+                validity_flag = ValidityFlag.UNRELIABLE
+                warnings.append(
+                    f"FWHM_obs ({fwhm_observed:.4f}°) ≤ FWHM_inst ({fwhm_instrumental:.4f}°): "
+                    "crystallite size exceeds instrument detection limit"
+                )
+                is_reliable = False
+                fwhm_sample = np.nan  # Mark as invalid
+            else:
+                fwhm_sample = np.sqrt(fwhm_sq_diff)
         else:
+            # No instrumental correction available
             fwhm_sample = fwhm_observed
-
-        fwhm_sample = max(fwhm_sample, 0.001)  # Prevent negative/zero
 
         # CRITICAL: Convert to radians
         theta_rad = np.radians(two_theta / 2)
@@ -218,15 +231,16 @@ class ScherrerCalculator:
         size_angstrom = (k_factor * self.wavelength) / (fwhm_sample_rad * cos_theta)
         size_nm = size_angstrom / 10
 
-        # Check size limits
-        if size_nm > MAX_RELIABLE_SIZE:
-            if validity_flag == ValidityFlag.VALID:
-                validity_flag = ValidityFlag.WARNING
-            warnings.append(f"Size {size_nm:.1f} nm exceeds detection limit")
-        elif size_nm < MIN_RELIABLE_SIZE:
-            if validity_flag == ValidityFlag.VALID:
-                validity_flag = ValidityFlag.WARNING
-            warnings.append(f"Size {size_nm:.1f} nm below precision limit")
+        # Check size limits (only if valid calculation)
+        if not np.isnan(size_nm):
+            if size_nm > MAX_RELIABLE_SIZE:
+                if validity_flag == ValidityFlag.VALID:
+                    validity_flag = ValidityFlag.WARNING
+                warnings.append(f"Size {size_nm:.1f} nm exceeds detection limit")
+            elif size_nm < MIN_RELIABLE_SIZE:
+                if validity_flag == ValidityFlag.VALID:
+                    validity_flag = ValidityFlag.WARNING
+                warnings.append(f"Size {size_nm:.1f} nm below precision limit")
 
         return ScherrerResult(
             size_nm=size_nm,
