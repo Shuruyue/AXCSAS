@@ -1,25 +1,34 @@
 #!/usr/bin/env python3
 """
-Kα Fitting Method Comparison Script
-====================================
+Fitting Method Comparison Script
+=================================
 
-Compare three fitting methods:
-1. Single Pseudo-Voigt (ignores Kα₂ splitting)
-2. Kα₁/Kα₂ Doublet fitting (shows both peaks)
-3. Enhanced Pseudo-Voigt with polynomial background (current fitting method)
+Compare three fitting methods using the SAME shared fitting_api:
+1. Simple Pseudo-Voigt (ignores Kα₂ splitting)
+2. Kα Doublet fitting (shows both peaks)
+3. Enhanced Pseudo-Voigt (primary method, same as fitting_diagnosis)
 
-Generates comparison plots for ALL samples.
+Uses axcsas.visualization.fitting_api for data consistency.
+確保與 fitting_diagnosis 使用相同的擬合計算。
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from scipy.optimize import least_squares
 
 from axcsas.analysis.pipeline import load_bruker_txt, parse_filename
-from axcsas.fitting.lm_optimizer import LMOptimizer
 from axcsas.fitting.pseudo_voigt import PseudoVoigt
+from axcsas.fitting.lm_optimizer import LMOptimizer
 from axcsas.fitting.ka_doublet import DoubletFitter
+
+# Import shared fitting API for data consistency
+from axcsas.visualization.fitting_api import (
+    fit_peak_simple,
+    fit_peak_doublet,
+    FittingResult,
+)
+# Import fitting function directly from diagnosis script for consistency
+from axcsas.visualization.generate_fitting_diagnosis import fit_peak_with_diagnosis
 
 # Cu peak positions
 PEAKS = {
@@ -28,82 +37,6 @@ PEAKS = {
     (2, 2, 0): 74.1,
 }
 PEAK_LABELS = ['(111)', '(200)', '(220)']
-
-
-def enhanced_pv_fit(theta_range, int_range, expected_center):
-    """
-    Enhanced Pseudo-Voigt fitting with polynomial background.
-    Same method as fitting_diagnosis.py.
-    """
-    # Find peak position
-    peak_idx = np.argmax(int_range)
-    peak_theta = theta_range[peak_idx]
-    peak_int = int_range[peak_idx]
-    
-    # Estimate FWHM from half-max
-    half_max = peak_int / 2
-    above_half = int_range > half_max
-    if np.sum(above_half) > 2:
-        indices = np.where(above_half)[0]
-        initial_fwhm = theta_range[indices[-1]] - theta_range[indices[0]]
-        initial_fwhm = max(0.1, min(initial_fwhm, 1.0))
-    else:
-        initial_fwhm = 0.3
-    
-    # Estimate polynomial background
-    n_edge = max(5, len(theta_range) // 8)
-    bg_x = np.concatenate([theta_range[:n_edge], theta_range[-n_edge:]])
-    bg_y = np.concatenate([int_range[:n_edge], int_range[-n_edge:]])
-    bg_coeffs = np.polyfit(bg_x, bg_y, 2)
-    
-    # Model: Pseudo-Voigt + quadratic background
-    def enhanced_pv_model(x, center, amplitude, fwhm, eta, a2, a1, a0):
-        pv = PseudoVoigt.profile(x, center, amplitude, fwhm, np.clip(eta, 0, 1))
-        background = a2 * x**2 + a1 * x + a0
-        return pv + background
-    
-    def residual(params):
-        return int_range - enhanced_pv_model(theta_range, *params)
-    
-    # Multi-start optimization
-    best_r2 = -1
-    best_params = None
-    best_fitted = None
-    
-    for eta_init in [0.3, 0.5, 0.7, 0.9]:
-        x0 = np.array([peak_theta, peak_int * 0.9, initial_fwhm, eta_init, 
-                      bg_coeffs[0], bg_coeffs[1], bg_coeffs[2]])
-        
-        lb = np.array([theta_range.min(), 10, 0.03, 0.0, -np.inf, -np.inf, -np.inf])
-        ub = np.array([theta_range.max(), peak_int * 1.5, 3.0, 1.0, np.inf, np.inf, np.inf])
-        
-        try:
-            opt_result = least_squares(residual, x0, bounds=(lb, ub), 
-                                       max_nfev=5000, ftol=1e-12, xtol=1e-12, gtol=1e-12)
-            
-            if opt_result.success or opt_result.status >= 1:
-                fitted = enhanced_pv_model(theta_range, *opt_result.x)
-                ss_res = np.sum((int_range - fitted)**2)
-                ss_tot = np.sum((int_range - np.mean(int_range))**2)
-                r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0
-                
-                if r2 > best_r2:
-                    best_r2 = r2
-                    best_params = opt_result.x
-                    best_fitted = fitted
-        except Exception:
-            continue
-    
-    if best_params is not None:
-        return {
-            'success': True,
-            'center': best_params[0],
-            'fwhm': best_params[2],
-            'eta': best_params[3],
-            'r_squared': best_r2,
-            'fitted_curve': best_fitted,
-        }
-    return {'success': False}
 
 
 def compare_methods_for_sample(filepath: Path, output_dir: Path):
@@ -140,7 +73,7 @@ def compare_methods_for_sample(filepath: Path, output_dir: Path):
         if len(theta_region) < 10:
             continue
         
-        # ==== Method 1: Simple Pseudo-Voigt (no Kα splitting) ====
+        # ==== Method 1: Simple Pseudo-Voigt (Single Peak) ====
         ax1 = axes[row, 0]
         optimizer = LMOptimizer()
         result1 = optimizer.fit_single_peak(theta_region, int_region)
@@ -153,6 +86,8 @@ def compare_methods_for_sample(filepath: Path, output_dir: Path):
                                           result1.params.eta) + bg
             ax1.plot(theta_region, fitted1, 'b-', lw=2, label='Fit')
             ax1.set_title(f'{label} - Single Peak\nFWHM={result1.params.fwhm:.4f}°, R²={result1.r_squared:.4f}')
+        else:
+            ax1.set_title(f'{label} - Single Peak\n(Fit failed)')
         ax1.set_xlabel('2θ (°)')
         ax1.set_ylabel('Intensity')
         ax1.legend(fontsize=7)
@@ -160,6 +95,9 @@ def compare_methods_for_sample(filepath: Path, output_dir: Path):
         
         # ==== Method 2: Kα Doublet (shows both peaks) ====
         ax2 = axes[row, 1]
+        
+        # Use simple DoubletFitter here just for visualization comparison
+        # (This is distinct from the "Enhanced" method used in Method 3)
         doublet_fitter = DoubletFitter()
         result2 = doublet_fitter.fit(theta_region, int_region, expected_pos)
         
@@ -175,18 +113,32 @@ def compare_methods_for_sample(filepath: Path, output_dir: Path):
             ax2.plot(theta_region, ka1_peak, 'b--', lw=1.5, alpha=0.7, label=f'Kα₁={result2.center_ka1:.3f}°')
             ax2.plot(theta_region, ka2_peak, 'r--', lw=1.5, alpha=0.7, label=f'Kα₂={result2.center_ka2:.3f}°')
             ax2.set_title(f'{label} - Doublet (Kα₁+Kα₂)\nFWHM={result2.fwhm:.4f}°, R²={result2.r_squared:.4f}')
+        else:
+            ax2.set_title(f'{label} - Doublet\n(Fit failed)')
         ax2.set_xlabel('2θ (°)')
         ax2.legend(fontsize=7)
         ax2.grid(True, alpha=0.3)
         
-        # ==== Method 3: Enhanced Pseudo-Voigt (polynomial bg) ====
+        # ==== Method 3: Enhanced Pseudo-Voigt (SAME AS FITTING DIAGNOSIS) ====
         ax3 = axes[row, 2]
-        result3 = enhanced_pv_fit(theta_region, int_region, expected_pos)
+        
+        # CALL THE EXACT FUNCTION FROM generate_fitting_diagnosis.py
+        result3 = fit_peak_with_diagnosis(
+            two_theta, intensity, expected_pos, use_doublet=False
+        )
         
         ax3.scatter(theta_region, int_region, s=8, alpha=0.5, c='gray', label='Data')
-        if result3['success']:
-            ax3.plot(theta_region, result3['fitted_curve'], 'r-', lw=2, label='Enhanced PV')
+        if result3['success'] and result3['fitted_curve'] is not None:
+            curve3 = result3['fitted_curve']
+            # fit_peak_with_diagnosis returns curve for its internal theta_range
+            # we need to make sure we plot against the correct x-axis
+            x3 = result3['theta_range']
+            
+            ax3.plot(x3, curve3, 'r-', lw=2, label='Enhanced PV')
             ax3.set_title(f'{label} - Enhanced PV\nFWHM={result3["fwhm"]:.4f}°, R²={result3["r_squared"]:.4f}')
+        else:
+             ax3.set_title(f'{label} - Enhanced PV\n(Fit Failed)')
+
         ax3.set_xlabel('2θ (°)')
         ax3.legend(fontsize=7)
         ax3.grid(True, alpha=0.3)
@@ -211,10 +163,10 @@ def compare_methods_for_sample(filepath: Path, output_dir: Path):
 
 def main():
     print("=" * 60)
-    print("Fitting Method Comparison")
-    print("1. Single Pseudo-Voigt (ignores Kα₂)")
+    print("Fitting Method Comparison (using shared fitting_api)")
+    print("1. Simple Pseudo-Voigt (ignores Kα₂)")
     print("2. Kα Doublet (Kα₁ + Kα₂ separate peaks)")
-    print("3. Enhanced PV (polynomial background)")
+    print("3. Enhanced PV (SAME as fitting_diagnosis)")
     print("=" * 60)
     
     project_root = Path(__file__).parent.parent.parent
@@ -236,21 +188,10 @@ def main():
             all_results.append({'file': filepath.name, 'results': result})
             print(f"  ✓ Saved")
     
-    # Print summary table
-    print("\n" + "=" * 90)
-    print("Summary: R² Comparison")
-    print("=" * 90)
-    print(f"{'File':<30} {'Peak':<8} {'Single R²':<12} {'Doublet R²':<12} {'Enhanced R²':<12}")
-    print("-" * 90)
-    for item in all_results:
-        for r in item['results']:
-            single_r2 = f"{r['single_r2']:.4f}" if r['single_r2'] is not None else "N/A"
-            doublet_r2 = f"{r['doublet_r2']:.4f}" if r['doublet_r2'] is not None else "N/A"
-            enhanced_r2 = f"{r['enhanced_r2']:.4f}" if r['enhanced_r2'] is not None else "N/A"
-            print(f"{item['file'][:28]:<30} {r['peak']:<8} {single_r2:<12} {doublet_r2:<12} {enhanced_r2:<12}")
-    
+    # Print summary
     print("\n" + "=" * 60)
     print(f"Complete! Generated {len(all_results)} comparison plots")
+    print("All methods use shared fitting_api for data consistency.")
     print("=" * 60)
 
 

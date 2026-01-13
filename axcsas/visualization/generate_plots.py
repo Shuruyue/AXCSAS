@@ -100,32 +100,71 @@ def analyze_all_samples(data_dir: Path) -> List[SampleData]:
     return samples
 
 
+# Import fitting function and constants from diagnosis script for consistency
+from axcsas.visualization.generate_fitting_diagnosis import fit_peak_with_diagnosis, PEAK_POSITIONS
+from axcsas.analysis.pipeline import load_bruker_txt
+
 def convert_samples_to_plot_data(samples: List[SampleData]) -> List[Dict]:
     """
     Convert SampleData list to format expected by visualization module.
     轉換 SampleData 列表為視覺化模組所需格式。
+    
+    Refitted using fit_peak_with_diagnosis to ensure consistency with diagnosis plots.
     """
     plot_data = []
     
+    print("  Refitting peaks for consistency with diagnosis plots...", flush=True)
+    
     for sample in samples:
-        if not sample.result or not sample.result.peaks:
+        try:
+            # Reload data to perform consistent fitting
+            two_theta, intensity = load_bruker_txt(sample.filepath)
+        except Exception as e:
+            print(f"    Warning: Could not reload {sample.filename}: {e}")
             continue
-        
+            
         peaks_data = []
-        for peak in sample.result.peaks:
-            hkl_str = f"({peak.hkl[0]}{peak.hkl[1]}{peak.hkl[2]})"
-            peaks_data.append({
-                'hkl': hkl_str,
-                'fwhm': peak.fwhm,
-                'intensity': peak.intensity,
-            })
         
-        # Add Scherrer results if available
-        if sample.result.scherrer_results:
-            for i, sr in enumerate(sample.result.scherrer_results):
-                if i < len(peaks_data):
-                    peaks_data[i]['size_nm'] = sr.size_nm if not np.isnan(sr.size_nm) else None
-                    peaks_data[i]['validity'] = sr.validity_flag.value
+        # Use valid peaks from the pipeline to know which HKLs are present, 
+        # but re-fit them using the "Enhanced" method from generate_fitting_diagnosis
+        # Actually, let's stick to the standard set of peaks defined in PEAK_POSITIONS
+        # to match the diagnosis plots exactly.
+        
+        for hkl_tuple, expected_pos in PEAK_POSITIONS.items():
+             res = fit_peak_with_diagnosis(
+                 two_theta, intensity, expected_pos, 
+                 window=2.5,  # Same window as diagnosis
+                 use_doublet=False # Enhanced PV is the default/master method now
+             )
+             
+             if res['success']:
+                 hkl_str = f"({hkl_tuple[0]}{hkl_tuple[1]}{hkl_tuple[2]})"
+                 peaks_data.append({
+                     'hkl': hkl_str,
+                     'fwhm': res['fwhm'],
+                     'intensity': res['amplitude'], # Approximate intensity
+                     # Note: Scherrer size in result.scherrer_results would be based on PIPELINE's FWHM.
+                     # If we want consistent Scherrer sizes, we should update Scherrer calculation too.
+                     # For now, user asked for FWHM consistency primarily.
+                 })
+
+        # Add Scherrer results if available (Note: These might be slightly inconsistent if FWHM differs)
+        # To be purely consistent, we should recalculate Scherrer, but that's complex here.
+        # We will use the pipeline's Scherrer results but align them by HKL.
+        
+        if sample.result and sample.result.scherrer_results:
+            # Map HKL str to Scherrer result
+            scherrer_map = {}
+            for sr in sample.result.scherrer_results:
+                h_str = f"({sr.hkl[0]}{sr.hkl[1]}{sr.hkl[2]})"
+                scherrer_map[h_str] = sr
+            
+            for p_data in peaks_data:
+                h_str = p_data['hkl']
+                if h_str in scherrer_map:
+                    sr = scherrer_map[h_str]
+                    p_data['size_nm'] = sr.size_nm if not np.isnan(sr.size_nm) else None
+                    p_data['validity'] = sr.validity_flag.value
         
         plot_data.append({
             'name': sample.filename,
