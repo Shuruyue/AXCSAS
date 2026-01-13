@@ -21,7 +21,27 @@ from axcsas.analysis.report_generator import (
 
 # Alias for backward compatibility  
 AnalysisPipeline = AXCSASPipeline
-ReportGenerator = None  # Module doesn't have this class but keep for compatibility
+
+
+class _DeprecatedReportGenerator:
+    """
+    Deprecated placeholder for backward compatibility.
+    已棄用的向後相容佔位類別。
+    """
+    def __init__(self, *args, **kwargs):
+        import warnings
+        warnings.warn(
+            "ReportGenerator is deprecated. Use generate_comprehensive_report() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        raise NotImplementedError(
+            "ReportGenerator has been replaced. "
+            "Please use generate_comprehensive_report() function."
+        )
+
+
+ReportGenerator = _DeprecatedReportGenerator
 
 __all__ = [
     "AXCSASPipeline",

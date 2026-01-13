@@ -360,7 +360,8 @@ class LMOptimizer:
         initial_guesses: Optional[List[PseudoVoigtParams]] = None
     ) -> List[FitResult]:
         """
-        Fit multiple peaks simultaneously.
+        Fit multiple peaks sequentially.
+        依序擬合多個峰。
         
         Args:
             two_theta: 2θ array
@@ -370,9 +371,20 @@ class LMOptimizer:
             
         Returns:
             List of FitResult objects
+            
+        Note / 注意:
+            目前使用依序擬合（每個峰獨立擬合），而非同時擬合。
+            對於嚴重重疊的峰（雖然在正常銅樣品中少見），
+            同時擬合的準確度可能更高。
+            
+            Currently uses sequential fitting (each peak fitted independently),
+            not simultaneous optimization. For severely overlapping peaks
+            (rare in normal copper samples), simultaneous fitting may be more accurate.
+            
+            Future improvement: implement global multi-peak optimization.
         """
-        # For now, fit peaks sequentially
-        # TODO: Implement simultaneous multi-peak fitting
+        # 演算法限制：依序擬合 - 列入未來優化項目
+        # Algorithm limitation: sequential fitting - future optimization target
         results = []
         
         if initial_guesses:

@@ -386,12 +386,18 @@ class AXCSASPipeline:
         # Parse filename
         file_info = parse_filename(filepath)
         
+        # 修正：檔名中的時間代表「樣品存放時間」而非「電鍍時間」
+        # Fix: filename time represents "sample age" (self-annealing time), not "plating time"
+        # 若使用者未提供 sample_age_hours，則使用檔名解析的時間
+        parsed_time = file_info['time_hours']
+        effective_sample_age = sample_age_hours if sample_age_hours is not None else parsed_time
+        
         result = PipelineResult(
             filepath=filepath,
             sample_name=file_info['name'],
             leveler_concentration=file_info['concentration_ml'],
-            plating_time_hours=file_info['time_hours'],
-            sample_age_hours=sample_age_hours,
+            plating_time_hours=None,  # 電鍍時間需另外提供
+            sample_age_hours=effective_sample_age,  # 使用有效的樣品存放時間
         )
         
         # 1. Load data
