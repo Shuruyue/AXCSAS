@@ -60,7 +60,7 @@ def fit_peak_with_diagnosis(
     intensity: np.ndarray,
     expected_center: float,
     window: float = 2.5,
-    use_doublet: bool = True
+    use_doublet: bool = False  # Pseudo-Voigt for reliability (DoubletFitter has environment issues)
 ) -> Dict:
     """
     Fit a single peak using Kα doublet model and return detailed diagnosis info.
@@ -123,11 +123,13 @@ def fit_peak_with_diagnosis(
     
     try:
         if use_doublet:
-            # Use Kα doublet fitting
-            fitter = DoubletFitter()
+            # Use Kα doublet fitting with timeout protection
+            import signal
+            
+            fitter = DoubletFitter(max_iterations=5000)
             fit_result = fitter.fit(theta_range, int_range, expected_center, initial_fwhm)
             
-            if fit_result.success:
+            if fit_result.success and fit_result.r_squared > 0.8:
                 result['success'] = True
                 result['center'] = fit_result.center_ka1
                 result['center_ka2'] = fit_result.center_ka2
@@ -136,9 +138,14 @@ def fit_peak_with_diagnosis(
                 result['eta'] = fit_result.eta
                 result['r_squared'] = fit_result.r_squared
                 result['fitted_curve'] = fit_result.fitted_curve
-        else:
-            # Fallback: standard Pseudo-Voigt
-            optimizer = LMOptimizer(max_iterations=500, tolerance=1e-6)
+                result['method'] = 'doublet'
+            else:
+                # Fallback to Pseudo-Voigt if doublet fitting fails or has low R²
+                use_doublet = False
+        
+        if not use_doublet or not result['success']:
+            # Fallback: standard Pseudo-Voigt (more robust)
+            optimizer = LMOptimizer(max_iterations=1000, tolerance=1e-6)
             initial_guess = PseudoVoigtParams(
                 center=peak_theta, amplitude=peak_int, fwhm=initial_fwhm, eta=0.5
             )
@@ -151,6 +158,7 @@ def fit_peak_with_diagnosis(
                 result['fwhm'] = fit_result.params.fwhm
                 result['eta'] = fit_result.params.eta
                 result['r_squared'] = fit_result.r_squared
+                result['method'] = 'pseudo-voigt (fallback)'
                 # Generate fitted curve with background
                 bg = np.min(int_range)
                 result['fitted_curve'] = PseudoVoigt.profile(

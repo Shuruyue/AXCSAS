@@ -14,7 +14,7 @@ Cu Kα wavelengths:
 """
 
 import numpy as np
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit, least_squares, minimize
 from scipy.ndimage import gaussian_filter1d
 from typing import Tuple, Optional, Dict
 from dataclasses import dataclass
@@ -201,7 +201,7 @@ class DoubletFitter:
     def __init__(
         self,
         intensity_ratio: float = KA2_KA1_RATIO,
-        max_iterations: int = 2000,
+        max_iterations: int = 5000,  # Increased for better convergence
         tolerance: float = 1e-8
     ):
         """
@@ -289,59 +289,94 @@ class DoubletFitter:
             slope_init = 0.0
         intercept_init = left_bg - slope_init * left_x
         
-        # Initial parameters: [center_ka1, amplitude_ka1, fwhm, eta, slope, intercept]
-        p0 = [initial_center, peak_amp * 0.8, initial_fwhm, 0.5, slope_init, intercept_init]
+        # Improved initial FWHM estimation using weighted half-maximum
+        bg_level = min(left_bg, right_bg)
+        half_max = (peak_amp + bg_level) / 2
+        above_half = intensity > half_max
+        if np.any(above_half):
+            left_idx = np.argmax(above_half)
+            right_idx = len(intensity) - 1 - np.argmax(above_half[::-1])
+            if right_idx > left_idx:
+                initial_fwhm = max(two_theta[right_idx] - two_theta[left_idx], 0.15)
         
-        bounds = (
-            [two_theta.min(), 10, 0.02, 0, -np.inf, 0],
-            [two_theta.max(), np.inf, 3.0, 1, np.inf, np.inf]
+        # Multi-start optimization for robustness
+        best_result = None
+        best_r_sq = -1
+        
+        # Define residual function ONCE outside loop (avoids closure issues)
+        profile_func = self._doublet_profile
+        
+        def make_residual(x_data, y_data):
+            def residual(params):
+                return y_data - profile_func(x_data, *params)
+            return residual
+        
+        residual_func = make_residual(two_theta, intensity)
+        
+        # Define bounds once
+        lb = np.array([two_theta.min(), 10, 0.05, 0.0, -1e6, -1e6])
+        ub = np.array([two_theta.max(), peak_amp * 3, 2.0, 1.0, 1e6, 1e6])
+        
+        # Try multiple initial eta values (Lorentzian/Gaussian mixing)
+        for eta_init in [0.3, 0.5, 0.7]:
+            # Initial parameters: [center_ka1, amplitude_ka1, fwhm, eta, slope, intercept]
+            x0 = np.array([initial_center, peak_amp * 0.8, initial_fwhm, eta_init, slope_init, intercept_init])
+            
+            try:
+                # Use least_squares with strict iteration limit
+                result = least_squares(
+                    residual_func,
+                    x0,
+                    bounds=(lb, ub),
+                    method='trf',
+                    ftol=self.tolerance,
+                    xtol=1e-10,
+                    gtol=1e-10,
+                    max_nfev=self.max_iterations,
+                    verbose=0
+                )
+                
+                if result.success or result.status >= 1:
+                    popt = result.x
+                    fitted = self._doublet_profile(two_theta, *popt)
+                    residuals = intensity - fitted
+                    chi_sq = np.sum(residuals ** 2)
+                    ss_tot = np.sum((intensity - np.mean(intensity)) ** 2)
+                    r_sq = 1 - (chi_sq / ss_tot) if ss_tot > 0 else 0
+                    
+                    if r_sq > best_r_sq:
+                        best_r_sq = r_sq
+                        center_ka2 = calculate_ka2_position(popt[0])
+                        best_result = DoubletFitResult(
+                            center_ka1=popt[0],
+                            center_ka2=center_ka2,
+                            amplitude_ka1=popt[1],
+                            amplitude_ka2=popt[1] * self.intensity_ratio,
+                            fwhm=popt[2],
+                            eta=popt[3],
+                            r_squared=r_sq,
+                            success=True,
+                            message=f"Doublet fit converged (R²={r_sq:.4f}, η={popt[3]:.2f})",
+                            fitted_curve=fitted
+                        )
+            except Exception:
+                continue
+        
+        if best_result is not None:
+            return best_result
+        
+        # Fallback if all attempts failed
+        return DoubletFitResult(
+            center_ka1=initial_center,
+            center_ka2=calculate_ka2_position(initial_center),
+            amplitude_ka1=peak_amp,
+            amplitude_ka2=peak_amp * self.intensity_ratio,
+            fwhm=initial_fwhm,
+            eta=0.5,
+            r_squared=0,
+            success=False,
+            message="Multi-start optimization failed"
         )
-        
-        try:
-            popt, pcov = curve_fit(
-                self._doublet_profile,
-                two_theta,
-                intensity,
-                p0=p0,
-                bounds=bounds,
-                maxfev=self.max_iterations,
-                ftol=self.tolerance,
-                method='trf'
-            )
-            
-            fitted = self._doublet_profile(two_theta, *popt)
-            residuals = intensity - fitted
-            chi_sq = np.sum(residuals ** 2)
-            ss_tot = np.sum((intensity - np.mean(intensity)) ** 2)
-            r_sq = 1 - (chi_sq / ss_tot) if ss_tot > 0 else 0
-            
-            center_ka2 = calculate_ka2_position(popt[0])
-            
-            return DoubletFitResult(
-                center_ka1=popt[0],
-                center_ka2=center_ka2,
-                amplitude_ka1=popt[1],
-                amplitude_ka2=popt[1] * self.intensity_ratio,
-                fwhm=popt[2],
-                eta=popt[3],
-                r_squared=r_sq,
-                success=True,
-                message=f"Doublet fit converged (Δ2θ = {center_ka2 - popt[0]:.4f}°)",
-                fitted_curve=fitted
-            )
-            
-        except Exception as e:
-            return DoubletFitResult(
-                center_ka1=initial_center,
-                center_ka2=calculate_ka2_position(initial_center),
-                amplitude_ka1=peak_amp,
-                amplitude_ka2=peak_amp * self.intensity_ratio,
-                fwhm=initial_fwhm,
-                eta=0.5,
-                r_squared=0,
-                success=False,
-                message=str(e)
-            )
 
 
 def compare_fitting_methods(

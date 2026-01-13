@@ -20,8 +20,8 @@ AXCSAS_STYLE: Dict[str, Any] = {
     'figure.facecolor': 'white',
     'figure.edgecolor': 'white',
 
-    # Save settings
-    'savefig.dpi': 300,
+    # Save settings (ultra-high quality)
+    'savefig.dpi': 1000,
     'savefig.facecolor': 'white',
     'savefig.edgecolor': 'white',
     'savefig.bbox': 'tight',
@@ -165,7 +165,7 @@ def create_figure(
 def save_figure(
     fig,
     filepath: str,
-    dpi: int = 300,
+    dpi: int = 1000,
     format: str = None,
     transparent: bool = False
 ) -> None:
