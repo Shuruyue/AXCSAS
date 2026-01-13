@@ -44,7 +44,13 @@ def compare_methods_for_sample(filepath: Path, output_dir: Path):
     
     # Create figure
     fig, axes = plt.subplots(3, 3, figsize=(15, 12))
-    fig.suptitle(f'Kα Doublet Fitting Comparison: {sample_name}', fontsize=14, fontweight='bold')
+    conc = file_info.get('concentration_ml', 0)
+    time_h = file_info.get('time_hours', 0)
+    fig.suptitle(
+        f'Kα Doublet Fitting Comparison: {sample_name}\n'
+        f'(Leveler: {conc:.1f} mL/1.5L, Annealing Time: {time_h:.0f}h)', 
+        fontsize=14, fontweight='bold'
+    )
     
     results = []
     
@@ -134,7 +140,7 @@ def main():
     print("Kα Doublet Fitting Comparison")
     print("=" * 60)
     
-    project_root = Path(__file__).parent
+    project_root = Path(__file__).parent.parent.parent
     data_dir = project_root / "data" / "raw" / "202511"
     output_dir = project_root / "outputs" / "plots" / "ka_comparison"
     output_dir.mkdir(parents=True, exist_ok=True)
