@@ -21,21 +21,21 @@ import sys
 # Add parent path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from physics.scherrer_enhanced import (
+from axcsas.methods.scherrer import (
     ScherrerCalculatorEnhanced,
     ScherrerResultEnhanced,
     ValidityFlag,
 )
-from physics.wh_enhanced import (
+from axcsas.methods.williamson_hall import (
     WilliamsonHallEnhanced,
     WHResultEnhanced,
     WHQualityLevel,
 )
-from physics.texture_enhanced import (
+from axcsas.methods.texture import (
     TextureAnalyzerEnhanced,
     TextureResultEnhanced,
 )
-from physics.defect_analysis import (
+from axcsas.methods.defect_analysis import (
     StackingFaultAnalyzer,
     StackingFaultResult,
     LatticeMonitor,
@@ -43,12 +43,12 @@ from physics.defect_analysis import (
     AnnealingState,
     determine_annealing_state,
 )
-from physics.report_generator import (
+from axcsas.analysis.report_generator import (
     ComprehensiveResult,
     generate_comprehensive_report,
     generate_csv_summary,
 )
-from fitting.hkl_assignment import assign_hkl
+from axcsas.fitting.hkl_assignment import assign_hkl
 
 
 # =============================================================================

@@ -11,9 +11,9 @@ import sys
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from validation import (
+
+from axcsas.validation import (
     calculate_rwp,
     calculate_r_squared,
     calculate_chi_squared,
@@ -22,7 +22,7 @@ from validation import (
     validate_size_range,
     check_broadening_ratio
 )
-from validation.goodness_of_fit import assess_fit_quality, calculate_rp
+from axcsas.validation.goodness_of_fit import assess_fit_quality, calculate_rp
 
 
 class TestGoodnessOfFit:

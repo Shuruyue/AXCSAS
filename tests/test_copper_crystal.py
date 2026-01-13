@@ -13,9 +13,9 @@ import sys
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from core.copper_crystal import (
+
+from axcsas.core.copper_crystal import (
     CopperCrystal,
     CU_CRYSTAL,
     CU_JCPDS_EXTENDED,
@@ -32,7 +32,7 @@ from core.copper_crystal import (
     ELECTROPLATED_A_STANDARD,
 )
 
-from core.additives import (
+from axcsas.core.additives import (
     AdditiveType,
     Additive,
     SUPPRESSOR,

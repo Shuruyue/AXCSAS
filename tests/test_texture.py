@@ -4,7 +4,7 @@ Unit Tests for Enhanced Texture Analyzer
 
 Tests Harris TC calculation and document examples (DATA ONLY, no diagnosis).
 
-Run with: pytest tests/test_texture_enhanced.py -v
+Run with: pytest tests/test_texture.py -v
 """
 
 import pytest
@@ -12,13 +12,13 @@ import sys
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from physics.texture_enhanced import (
+
+from axcsas.methods.texture import (
     TextureAnalyzerEnhanced,
     TextureResultEnhanced,
     OrientationType,
-    analyze_texture_enhanced,
+    analyze_texture,
     generate_texture_report,
     JCPDS_STANDARD_INTENSITY,
 )
@@ -65,7 +65,7 @@ class TestDocumentExample:
             (2, 2, 0): 4200,
         }
         
-        result = analyze_texture_enhanced(intensities)
+        result = analyze_texture(intensities)
         
         # Check TC values (allow 5% tolerance)
         assert abs(result.tc_values[(1, 1, 1)] - 0.97) < 0.05
@@ -80,7 +80,7 @@ class TestDocumentExample:
             (2, 2, 0): 4200,
         }
         
-        result = analyze_texture_enhanced(intensities)
+        result = analyze_texture(intensities)
         
         assert result.dominant_hkl == (2, 2, 0)
 
@@ -97,7 +97,7 @@ class TestOrientationType:
             (2, 2, 0): 2000,   # Standard
         }
         
-        result = analyze_texture_enhanced(intensities)
+        result = analyze_texture(intensities)
         
         # (111) should be marked preferred
         tc_111 = [d for d in result.tc_details if d.hkl == (1, 1, 1)][0]
@@ -111,7 +111,7 @@ class TestOrientationType:
             (2, 2, 0): 4200,
         }
         
-        result = analyze_texture_enhanced(intensities)
+        result = analyze_texture(intensities)
         
         # (200) should be marked suppressed (TC = 0.74)
         tc_200 = [d for d in result.tc_details if d.hkl == (2, 0, 0)][0]
@@ -129,7 +129,7 @@ class TestStatisticalMeasures:
             (2, 2, 0): 4200,
         }
         
-        result = analyze_texture_enhanced(intensities)
+        result = analyze_texture(intensities)
         
         # Should have non-zero degree of texture
         assert result.degree_of_texture > 0
@@ -143,7 +143,7 @@ class TestStatisticalMeasures:
             (2, 2, 0): 2000,
         }
         
-        result = analyze_texture_enhanced(intensities)
+        result = analyze_texture(intensities)
         
         # is_random is True if all TC are between 0.9-1.1
         assert isinstance(result.is_random, bool)
@@ -160,7 +160,7 @@ class TestReportGeneration:
             (2, 2, 0): 4200,
         }
         
-        result = analyze_texture_enhanced(intensities)
+        result = analyze_texture(intensities)
         report = generate_texture_report(result, "Test Sample")
         
         assert "Texture" in report
@@ -177,7 +177,7 @@ class TestReportGeneration:
             (2, 2, 0): 4200,
         }
         
-        result = analyze_texture_enhanced(intensities)
+        result = analyze_texture(intensities)
         report = generate_texture_report(result, "Test Sample")
         
         # Should not contain judgment keywords
@@ -194,7 +194,7 @@ class TestEdgeCases:
             (1, 1, 1): 15680,  # Only 1 peak
         }
         
-        result = analyze_texture_enhanced(intensities)
+        result = analyze_texture(intensities)
         
         assert result.n_peaks == 0 or len(result.tc_values) < 2
     
@@ -207,7 +207,7 @@ class TestEdgeCases:
         }
         
         # Should not raise exception
-        result = analyze_texture_enhanced(intensities)
+        result = analyze_texture(intensities)
         assert result is not None
 
 

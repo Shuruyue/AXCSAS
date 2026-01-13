@@ -4,7 +4,7 @@ Unit Tests for Enhanced Scherrer Calculator
 
 Tests K value lookup, unit conversion, validity flags, and calculation accuracy.
 
-Run with: pytest tests/test_scherrer_enhanced.py -v
+Run with: pytest tests/test_scherrer.py -v
 """
 
 import pytest
@@ -13,17 +13,17 @@ import sys
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from physics.scherrer_enhanced import (
+
+from axcsas.methods.scherrer import (
     ScherrerCalculatorEnhanced,
     ScherrerResultEnhanced,
     ValidityFlag,
-    calculate_scherrer_enhanced,
+    calculate_scherrer,
     generate_scherrer_report,
     FWHM_RATIO_THRESHOLD,
 )
-from core.copper_crystal import (
+from axcsas.core.copper_crystal import (
     get_k_for_hkl,
     SCHERRER_CUBIC_K,
 )
@@ -96,7 +96,7 @@ class TestDocumentExample:
             β_sample = 0.224°
             D = 49.0 nm
         """
-        result = calculate_scherrer_enhanced(
+        result = calculate_scherrer(
             two_theta=43.32,
             fwhm_observed=0.25,
             fwhm_instrumental=0.08,
@@ -117,7 +117,7 @@ class TestDocumentExample:
     
     def test_spherical_gives_smaller_size(self):
         """Using spherical K=0.89 should give ~37.8 nm (30% less)."""
-        result = calculate_scherrer_enhanced(
+        result = calculate_scherrer(
             two_theta=43.32,
             fwhm_observed=0.25,
             fwhm_instrumental=0.08,
@@ -133,7 +133,7 @@ class TestValidityFlags:
     
     def test_valid_flag_normal(self):
         """Normal calculation should have VALID flag."""
-        result = calculate_scherrer_enhanced(
+        result = calculate_scherrer(
             two_theta=43.32,
             fwhm_observed=0.25,
             fwhm_instrumental=0.08
@@ -145,7 +145,7 @@ class TestValidityFlags:
     def test_unreliable_flag_narrow_peak(self):
         """Narrow peak (ratio < 1.2) should be UNRELIABLE."""
         # FWHM_obs = 0.09, FWHM_inst = 0.08 → ratio = 1.125 < 1.2
-        result = calculate_scherrer_enhanced(
+        result = calculate_scherrer(
             two_theta=43.32,
             fwhm_observed=0.09,
             fwhm_instrumental=0.08
@@ -157,7 +157,7 @@ class TestValidityFlags:
     def test_warning_flag_large_size(self):
         """Very large size (>200 nm) should trigger WARNING."""
         # Very narrow peak → large size
-        result = calculate_scherrer_enhanced(
+        result = calculate_scherrer(
             two_theta=43.32,
             fwhm_observed=0.02,
             fwhm_instrumental=0.001

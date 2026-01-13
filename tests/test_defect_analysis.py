@@ -12,9 +12,9 @@ import sys
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from physics.defect_analysis import (
+
+from axcsas.methods.defect_analysis import (
     StackingFaultAnalyzer,
     StackingFaultResult,
     StackingFaultSeverity,
@@ -30,7 +30,7 @@ from physics.defect_analysis import (
     WARREN_G_COEFFICIENT,
     STANDARD_LATTICE_CONSTANT,
 )
-from physics.report_generator import (
+from axcsas.analysis.report_generator import (
     ComprehensiveResult,
     generate_comprehensive_report,
     generate_csv_summary,

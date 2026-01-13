@@ -1,162 +1,148 @@
-# AXCSAS User Guide
+# AXCSAS 使用指南
 
-AXCSAS (Advanced XRD Crystallite Size Analysis System) 使用指南。
+## 快速開始
 
----
-
-## Quick Start
-
-### 1. 安裝依賴
+### 安裝
 
 ```bash
-cd AXCSAS
-pip install -r requirements.txt
+pip install -e .
 ```
 
-### 2. 準備數據
-
-將 XRD 數據檔案放入 `data/raw/` 目錄。
-
-支援格式：`.xy`, `.csv`, `.txt` (Bruker)
-
-### 3. 分析樣品
+### 基本使用
 
 ```bash
-# 單一樣品
-python scripts/analyze_sample.py -i data/raw/sample.xy -o outputs/results/
+# 分析 XRD 資料
+axcsas analyze data/raw/sample.txt -o outputs/
 
-# 批次分析
-python scripts/batch_analysis.py -i data/raw/ -o outputs/results/
-```
+# 產生報告
+axcsas report outputs/results.csv
 
-### 4. 產生報告
-
-```bash
-python scripts/generate_report.py -i outputs/results/ -o outputs/reports/
+# 查看幫助
+axcsas --help
 ```
 
 ---
 
-## Command Reference
+## 模組使用
 
-### analyze_sample.py
+### 1. Scherrer 晶粒尺寸分析
 
-```
-用法: python scripts/analyze_sample.py [OPTIONS]
+```python
+from axcsas.methods import ScherrerCalculator
 
-選項:
-  -i, --input     輸入 XRD 檔案路徑 (必填)
-  -o, --output    輸出目錄 (預設: outputs/results)
-  -c, --config    設定檔路徑 (預設: config.yaml)
-  --no-plots      不產生圖表
-```
+calc = ScherrerCalculator(wavelength=1.54056)
+result = calc.calculate(
+    two_theta=43.3,
+    fwhm_observed=0.25,
+    fwhm_instrumental=0.08,
+    hkl=(1, 1, 1)
+)
 
-### batch_analysis.py
-
-```
-用法: python scripts/batch_analysis.py [OPTIONS]
-
-選項:
-  -i, --input-dir   輸入目錄 (必填)
-  -o, --output-dir  輸出目錄 (預設: outputs/results)
-  -c, --config      設定檔路徑 (預設: config.yaml)
+print(f"晶粒尺寸: {result.size_nm:.1f} nm")
+print(f"有效性: {result.validity_flag}")
 ```
 
-### generate_report.py
+### 2. Williamson-Hall 分析
 
+```python
+from axcsas.methods import WilliamsonHallAnalyzer
+import numpy as np
+
+wh = WilliamsonHallAnalyzer()
+two_theta = np.array([43.3, 50.4, 74.1, 89.9])
+fwhm = np.array([0.25, 0.27, 0.32, 0.38])
+
+result = wh.analyze(two_theta, fwhm)
+
+print(f"晶粒尺寸: {result.crystallite_size_nm:.1f} nm")
+print(f"微應變: {result.microstrain:.2e}")
+print(f"R²: {result.r_squared:.3f}")
 ```
-用法: python scripts/generate_report.py [OPTIONS]
 
-選項:
-  -i, --input   分析結果目錄 (必填)
-  -o, --output  報告輸出目錄 (預設: outputs/reports)
-  -t, --title   報告標題
+### 3. 織構分析
+
+```python
+from axcsas.methods import TextureAnalyzer
+
+analyzer = TextureAnalyzer()
+intensities = {
+    (1, 1, 1): 100,
+    (2, 0, 0): 35,
+    (2, 2, 0): 15,
+}
+
+result = analyzer.analyze(intensities)
+
+print(f"優選方向: {result.dominant_hkl}")
+print(f"織構係數: {result.tc_values}")
+```
+
+### 4. 完整分析流程
+
+```python
+from axcsas.analysis import AXCSASPipeline
+
+pipeline = AXCSASPipeline()
+result = pipeline.analyze("data/raw/sample.txt")
+
+print(result.report)
 ```
 
 ---
 
-## Configuration
+## 輸出結構
+
+```
+outputs/
+├── analysis/       # CSV 分析結果
+├── plots/          # 視覺化圖表
+│   ├── fwhm/
+│   ├── scherrer/
+│   ├── texture/
+│   └── williamson_hall/
+├── reports/        # 文字報告
+└── calibration/    # 校準資料
+```
+
+---
+
+## 配置
 
 編輯 `config.yaml` 調整分析參數：
 
 ```yaml
-# 預處理設定
-preprocessing:
-  smoothing:
-    window_size: 11    # Savitzky-Golay 窗口 (奇數)
-    poly_order: 3      # 多項式階數
-  background:
-    method: "chebyshev"
-    poly_degree: 5
+instrument:
+  wavelength: 1.54056      # Cu Kα1
+  caglioti_U: null         # 需校準
+  caglioti_V: null
+  caglioti_W: null
 
-# 峰值擬合
-fitting:
-  function: "pseudo_voigt"
-  peak_detection:
-    min_height: 100    # 最小峰高
-    min_distance: 0.5  # 最小峰間距 (度)
+analysis:
+  scherrer_k: 0.89
+  wh_r2_threshold: 0.70
 
-# 驗證閾值
-validation:
-  min_broadening_ratio: 1.2
-  max_rwp: 10.0
+output:
+  format: csv
+  include_plots: true
 ```
 
 ---
 
-## Output Files
+## 常見問題
 
-分析後產生的檔案：
-
-| 檔案 | 說明 |
-|------|------|
-| `*_peaks.csv` | 峰值擬合結果 |
-| `*_summary.yaml` | 分析摘要 |
-| `*_fit.png` | 擬合圖 |
-| `batch_summary.csv` | 批次匯總 |
-| `analysis_report.md` | 完整報告 |
-
----
-
-## Troubleshooting
-
-### 問題：Size > 200 nm 警告
-
-**原因**：峰寬太小，接近儀器極限  
-**解決**：確認數據品質，考慮儀器校正
-
-### 問題：W-H R² 過低
-
-**原因**：峰數不足或非均勻應變  
-**解決**：確保至少 3 個峰，檢查峰位判定
-
-### 問題：Texture TC 異常
-
-**原因**：強度數據不正確  
-**解決**：確認峰高讀取正確，檢查 hkl 指定
-
----
-
-## API Reference
-
-```python
-from src.physics import ScherrerCalculator, WilliamsonHallAnalyzer
-from src.validation import ErrorAnalyzer
-
-# Scherrer 計算
-calc = ScherrerCalculator(wavelength=1.54056, k_factor=0.89)
-result = calc.calculate(two_theta=43.3, fwhm=0.25)
-print(f"Size: {result.size_nm:.1f} nm")
-
-# W-H 分析
-wh = WilliamsonHallAnalyzer()
-result = wh.analyze(two_theta_array, fwhm_array)
-print(f"Size: {result.crystallite_size_nm:.1f} nm")
-print(f"Strain: {result.microstrain:.2e}")
+### Q: 儀器參數未校準怎麼辦？
+A: 使用 LaB6 或 Si 標準樣品執行校準：
+```bash
+axcsas calibrate data/standards/LaB6.txt
 ```
 
----
+### Q: 為什麼 Scherrer 結果標記為 UNRELIABLE？
+A: 當計算的晶粒尺寸超出 5-200 nm 範圍時會標記。可能原因：
+- FWHM 太小（接近儀器極限）
+- FWHM 太大（奈米級以下晶粒）
 
-## Support
-
-問題回報：建立 Issue 或聯繫開發團隊
+### Q: W-H R² 很低怎麼辦？
+A: 低 R² 通常表示：
+- 數據點不足（需 ≥3 個峰）
+- 存在各向異性應變
+- 峰擬合不準確

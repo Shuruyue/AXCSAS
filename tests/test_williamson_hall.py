@@ -4,7 +4,7 @@ Unit Tests for Enhanced Williamson-Hall Analyzer
 
 Tests R² quality assessment, anisotropy diagnostics, and calculation accuracy.
 
-Run with: pytest tests/test_wh_enhanced.py -v
+Run with: pytest tests/test_williamson_hall.py -v
 """
 
 import pytest
@@ -13,9 +13,9 @@ import sys
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from physics.wh_enhanced import (
+
+from axcsas.methods.williamson_hall import (
     WilliamsonHallEnhanced,
     WHResultEnhanced,
     WHQualityLevel,
