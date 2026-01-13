@@ -269,8 +269,8 @@ def generate_sample_fitting_plot(
     # Create figure with 3 subplots using AXCSAS style
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     fig.suptitle(
-        f'Peak Fitting Diagnosis (Kα Doublet): {sample_name}\n'
-        f'(Leveler: {conc} ml, Time: {time_h}h)', 
+        f'Peak Fitting Diagnosis: {sample_name}\n'
+        f'(Leveler: {conc:.1f} mL/1.5L, Annealing Time: {time_h:.0f}h)', 
         fontsize=14, fontweight='bold'
     )
     
