@@ -133,8 +133,8 @@ def convert_samples_to_plot_data(samples: List[SampleData]) -> List[Dict]:
         for hkl_tuple, expected_pos in PEAK_POSITIONS.items():
              res = fit_peak_with_diagnosis(
                  two_theta, intensity, expected_pos, 
-                 window=2.5,  # Same window as diagnosis
-                 use_doublet=False # Enhanced PV is the default/master method now
+                 window=2.5,
+                 use_doublet=True  # Same as fitting_diagnosis for consistency
              )
              
              hkl_str = f"({hkl_tuple[0]}{hkl_tuple[1]}{hkl_tuple[2]})"

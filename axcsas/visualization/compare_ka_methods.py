@@ -119,7 +119,7 @@ def compare_methods_for_sample(filepath: Path, output_dir: Path):
         
         # CALL THE EXACT FUNCTION FROM generate_fitting_diagnosis.py
         result3 = fit_peak_with_diagnosis(
-            two_theta, intensity, expected_pos, use_doublet=False
+            two_theta, intensity, expected_pos, use_doublet=True  # Same as fitting_diagnosis
         )
         
         ax3.scatter(theta_region, int_region, s=8, alpha=0.5, c='gray', label='Data')

@@ -287,6 +287,7 @@ def generate_sample_fitting_plot(
         color = colors[idx]
         
         # Fit peak using doublet model
+        # Use DoubletFitter first (higher R²), with Enhanced PV as fallback
         fit_result = fit_peak_with_diagnosis(two_theta, intensity, expected_pos, use_doublet=True)
         
         if fit_result['theta_range'] is not None:
