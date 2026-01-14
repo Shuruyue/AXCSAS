@@ -21,10 +21,11 @@ from axcsas.visualization.fitting_plots import (
 from axcsas.visualization.fwhm_plots import (
     plot_fwhm_by_peak,
     plot_fwhm_evolution,
+    plot_fwhm_by_concentration,
 )
 from axcsas.visualization.scherrer_plots import (
-    plot_scherrer_sizes,
-    plot_size_distribution,
+    plot_scherrer_evolution_by_peak,
+    plot_scherrer_by_concentration,
 )
 from axcsas.visualization.style import (
     AXCSAS_STYLE,
@@ -50,9 +51,10 @@ __all__ = [
     # FWHM
     "plot_fwhm_evolution",
     "plot_fwhm_by_peak",
+    "plot_fwhm_by_concentration",
     # Scherrer
-    "plot_scherrer_sizes",
-    "plot_size_distribution",
+    "plot_scherrer_evolution_by_peak",
+    "plot_scherrer_by_concentration",
     # Williamson-Hall
     "plot_williamson_hall",
     "plot_wh_residuals",

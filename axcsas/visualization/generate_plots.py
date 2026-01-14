@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 import re
 
-from axcsas.methods.scherrer import ValidityFlag
+from axcsas.methods.scherrer import ValidityFlag, calculate_scherrer
 from axcsas.analysis.pipeline import AXCSASPipeline, AnalysisConfig, PipelineResult
 
 # Import new visualization module
@@ -30,8 +30,8 @@ from axcsas.visualization.fwhm_plots import (
     plot_fwhm_by_concentration,
 )
 from axcsas.visualization.scherrer_plots import (
-    plot_scherrer_sizes,
-    plot_size_distribution,
+    plot_scherrer_evolution_by_peak,
+    plot_scherrer_by_concentration,
 )
 
 # Apply unified style
@@ -141,10 +141,19 @@ def convert_samples_to_plot_data(samples: List[SampleData]) -> List[Dict]:
              hkl_str = f"({hkl_tuple[0]}{hkl_tuple[1]}{hkl_tuple[2]})"
              
              if res['success']:
+                 # Calculate Scherrer size for consistency
+                 sr = calculate_scherrer(
+                     two_theta=res['center'], 
+                     fwhm_observed=res['fwhm'], 
+                     fwhm_instrumental=0.05
+                 )
+                 
                  peaks_data.append({
                      'hkl': hkl_str,
                      'fwhm': res['fwhm'],
                      'intensity': res['amplitude'],
+                     'size_nm': sr.size_nm,
+                     'validity': sr.validity_flag.value,
                      'fit_quality': 'high' if not res.get('low_quality', False) else 'low',
                  })
              else:
@@ -153,31 +162,46 @@ def convert_samples_to_plot_data(samples: List[SampleData]) -> List[Dict]:
                  if sample.result and sample.result.peaks:
                      for pipeline_peak in sample.result.peaks:
                          if pipeline_peak.hkl == hkl_tuple:
+                             # Calculate fallback size
+                             sr_fallback = calculate_scherrer(
+                                 two_theta=pipeline_peak.two_theta,
+                                 fwhm_observed=pipeline_peak.fwhm,
+                                 fwhm_instrumental=0.05
+                             )
                              peaks_data.append({
                                  'hkl': hkl_str,
                                  'fwhm': pipeline_peak.fwhm,
                                  'intensity': pipeline_peak.intensity,
+                                 'size_nm': sr_fallback.size_nm,
+                                 'validity': sr_fallback.validity_flag.value,
                                  'fit_quality': 'fallback',  # Mark as fallback
                              })
                              break
 
-        # Add Scherrer results if available (Note: These might be slightly inconsistent if FWHM differs)
-        # To be purely consistent, we should recalculate Scherrer, but that's complex here.
-        # We will use the pipeline's Scherrer results but align them by HKL.
-        
-        if sample.result and sample.result.scherrer_results:
-            # Map HKL str to Scherrer result
-            scherrer_map = {}
-            for sr in sample.result.scherrer_results:
-                h_str = f"({sr.hkl[0]}{sr.hkl[1]}{sr.hkl[2]})"
-                scherrer_map[h_str] = sr
+        # Consistently calculate Scherrer size using the DIAGNOSIS FWHM
+        # This ensures data consistency with the FWHM plots
+        for p_data in peaks_data:
+            # We assume use_cubic_habit=True (default) and instrument broadening=0.05
+            # We must pass the EXPECTED position for accurate K-factor calculation
+            # But calculate_scherrer calculates K based on observed 2theta if HKL is auto-assigned?
+            # Better to let it assign HKL based on 2theta.
+            # However, we already KNOW the HKL. 
+            # Note: calculate_scherrer takes (two_theta, fwhm, fwhm_instrumental)
+            # We should probably pass the observed FWHM.
             
-            for p_data in peaks_data:
-                h_str = p_data['hkl']
-                if h_str in scherrer_map:
-                    sr = scherrer_map[h_str]
-                    p_data['size_nm'] = sr.size_nm if not np.isnan(sr.size_nm) else None
-                    p_data['validity'] = sr.validity_flag.value
+            # Find the peak position (approximate from expected)
+            # Actually, `fit_peak_with_diagnosis` returns 'center' in res['center'] if we captured it?
+            # It seems fit_peak_with_diagnosis only returns:
+            # {'success': True, 'amplitude': ..., 'center': ..., 'sigma': ..., 'fwhm': ..., 'r2': ...}
+            # Let's verify what fit_peak_with_diagnosis returns. 
+            # It returns a dict.
+            
+            # Wait, `res` is available inside the loop. But here we are iterating over `peaks_data` which is a processed list.
+            # We should calculate sizing inside the loop where `res` is available.
+            pass
+
+        # Let's rewrite the loop above to include size calculation immediately
+
         
         plot_data.append({
             'name': sample.filename,
@@ -245,40 +269,29 @@ def generate_scherrer_plots(samples: List[SampleData], output_dir: Path) -> int:
     
     count = 0
     
-    # Plot 1: Scherrer sizes by peak
+    # Plot 1: Scherrer evolution by peak (direction)
     try:
-        fig = plot_scherrer_sizes(
+        fig = plot_scherrer_evolution_by_peak(
             plot_data,
-            output_path=str(output_dir / 'scherrer_size_by_peak.png'),
+            output_path=str(output_dir / 'scherrer_size_by_direction.png'),
             show=False,
-            show_validity=True
         )
         count += 1
-        print(f"  ✓ scherrer_size_by_peak.png")
+        print(f"  ✓ scherrer_size_by_direction.png")
     except Exception as e:
-        print(f"  ✗ scherrer_size_by_peak.png: {e}")
+        print(f"  ✗ scherrer_size_by_direction.png: {e}")
     
-    # Plot 2: Size distribution (aggregate all sizes)
-    all_sizes = []
-    for sample in samples:
-        if sample.result and sample.result.scherrer_results:
-            for sr in sample.result.scherrer_results:
-                if sr.size_nm and not np.isnan(sr.size_nm) and sr.size_nm > 0:
-                    if sr.validity_flag != ValidityFlag.UNRELIABLE:
-                        all_sizes.append(sr.size_nm)
-    
-    if all_sizes:
-        try:
-            fig = plot_size_distribution(
-                all_sizes,
-                output_path=str(output_dir / 'scherrer_size_distribution.png'),
-                show=False,
-                sample_name='All Samples'
-            )
-            count += 1
-            print(f"  ✓ scherrer_size_distribution.png")
-        except Exception as e:
-            print(f"  ✗ scherrer_size_distribution.png: {e}")
+    # Plot 2: Scherrer by concentration (4 subplots, square)
+    try:
+        fig = plot_scherrer_by_concentration(
+            plot_data,
+            output_path=str(output_dir / 'scherrer_size_by_concentration.png'),
+            show=False,
+        )
+        count += 1
+        print(f"  ✓ scherrer_size_by_concentration.png")
+    except Exception as e:
+        print(f"  ✗ scherrer_size_by_concentration.png: {e}")
     
     return count
 

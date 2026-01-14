@@ -17,117 +17,116 @@ from .style import (
 )
 
 
-def plot_scherrer_sizes(
-    results: List[Dict[str, Any]],
+def plot_scherrer_evolution_by_peak(
+    data: List[Dict[str, Any]],
+    x_param: str = "time",
     output_path: Optional[str] = None,
     dpi: int = 1000,
     format: str = "png",
     show: bool = True,
-    figsize: Tuple[float, float] = (10, 6),
-    show_validity: bool = True,
+    figsize: Tuple[float, float] = (12, 8),
+    instrument_limit: Optional[float] = None, # Not really applicable for size, but kept for interface consistency
 ) -> plt.Figure:
-    """Plot crystallite sizes from Scherrer analysis for each peak.
-    繪製各峰 Scherrer 晶粒尺寸分析結果。
+    """Plot Scherrer size evolution by peak (direction).
     
-    Args:
-        results: List of dictionaries with keys:
-            - 'name': Sample name
-            - 'peaks': List of dicts with 'hkl', 'size_nm', 'validity'
-        output_path: Optional path to save figure.
-        dpi: Output resolution.
-        format: Output format.
-        show: Whether to display figure.
-        figsize: Figure size.
-        show_validity: Whether to show validity markers.
-        
-    Returns:
-        Matplotlib Figure object.
-        
-    Example:
-        >>> results = [
-        ...     {'name': 'Sample1', 'peaks': [
-        ...         {'hkl': '(111)', 'size_nm': 45.2, 'validity': 'VALID'},
-        ...         {'hkl': '(200)', 'size_nm': 42.8, 'validity': 'VALID'},
-        ...     ]},
-        ... ]
-        >>> fig = plot_scherrer_sizes(results)
-
+    Creates 3 subplots (111, 200, 220), each showing 4 concentration lines.
+    X-axis: Annealing Time, Y-axis: Crystallite Size (nm).
     """
     apply_axcsas_style()
 
     # Collect all unique hkl values
     all_hkls = set()
-    for sample in results:
+    for sample in data:
         for peak in sample.get('peaks', []):
             all_hkls.add(peak['hkl'])
 
     hkl_list = sorted(list(all_hkls))
-    n_samples = len(results)
-    n_peaks = len(hkl_list)
+    n_hkls = len(hkl_list)
 
-    if n_peaks == 0:
+    if n_hkls == 0:
         raise ValueError("No peak data found in input")
 
-    fig, ax = plt.subplots(figsize=figsize)
+    # Create subplots for each hkl (square-like aspect)
+    n_cols = min(n_hkls, 3)
+    n_rows = (n_hkls + n_cols - 1) // n_cols
 
-    # Bar width and positions
-    bar_width = 0.8 / n_samples
-    x_positions = np.arange(n_peaks)
-    colors = get_color_palette(n_samples)
+    # Each subplot is 5x5 inches for square aspect
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 5.5*n_rows), squeeze=False)
+    axes = axes.flatten()
 
-    for sample_idx, sample in enumerate(results):
-        size_values = []
-        validity_values = []
+    x_labels = {
+        'concentration': 'Leveler Concentration (mL/1.5L)',
+        'time': 'Annealing Time (hours)',
+    }
+    x_label = x_labels.get(x_param, x_param)
 
-        for hkl in hkl_list:
-            size = None
-            validity = 'UNKNOWN'
-            for peak in sample.get('peaks', []):
-                if peak['hkl'] == hkl:
-                    size = peak.get('size_nm', 0)
-                    validity = peak.get('validity', 'VALID')
-                    break
-            size_values.append(size if size is not None else 0)
-            validity_values.append(validity)
+    # Determine grouping variable (opposite of x_param)
+    # Usually we plot vs Time, grouped by Concentration
+    group_key = 'concentration'
+    group_values = sorted(set(sample.get('concentration', 0) for sample in data))
+    colors_by_group = get_color_palette(len(group_values))
+    group_color_map = dict(zip(group_values, colors_by_group))
+    label_format = lambda g: f'{g} mL/1.5L'
+    
+    # Plot each hkl
+    for idx, hkl in enumerate(hkl_list):
+        ax = axes[idx]
+        
+        # Plot each group separately
+        for group_val in group_values:
+            x_values = []
+            y_values = []
+            
+            for sample in data:
+                if sample.get(group_key, 0) != group_val:
+                    continue
+                x_val = sample.get(x_param, 0)
+                for peak in sample.get('peaks', []):
+                    if peak['hkl'] == hkl:
+                        val = peak.get('size_nm')
+                        if val is not None and not np.isnan(val):
+                            x_values.append(x_val)
+                            y_values.append(val)
+            
+            if x_values:
+                color = group_color_map[group_val]
+                # Sort by x-value
+                sorted_indices = np.argsort(x_values)
+                x_sorted = np.array(x_values)[sorted_indices]
+                y_sorted = np.array(y_values)[sorted_indices]
+                
+                label = label_format(group_val)
+                ax.scatter(x_sorted, y_sorted, c=color, s=60, alpha=0.8, 
+                          edgecolors='black', linewidths=0.5)
+                ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle='-',
+                       linewidth=2.0, label=label)
 
-        offset = (sample_idx - n_samples / 2 + 0.5) * bar_width
+        ax.set_xlabel(x_label)
+        ax.set_ylabel('Crystallite Size (nm)')
+        ax.set_title(f'{hkl} Peak')
+        ax.legend(loc='upper right', fontsize=8, ncol=2)
+        ax.set_box_aspect(1)  # Make subplot square
+        ax.grid(True, alpha=0.3)
 
-        # Base bars
-        bars = ax.bar(
-            x_positions + offset,
-            size_values,
-            bar_width,
-            label=sample.get('name', f'Sample {sample_idx + 1}'),
-            color=colors[sample_idx % len(colors)],
-            alpha=0.8,
-            edgecolor='black',
-            linewidth=0.5
-        )
+    # Hide unused axes
+    for idx in range(len(hkl_list), len(axes)):
+        axes[idx].set_visible(False)
 
-        # Add validity markers if enabled
-        if show_validity:
-            for bar, validity in zip(bars, validity_values):
-                if validity == 'UNRELIABLE':
-                    # Add cross-hatch for unreliable
-                    bar.set_hatch('//')
-                    bar.set_alpha(0.5)
-                elif validity == 'WARNING':
-                    # Add dot pattern for warning
-                    bar.set_hatch('..')
+    # Set same Y-axis limits for all subplots
+    all_y_values = []
+    for sample in data:
+        for peak in sample.get('peaks', []):
+            val = peak.get('size_nm')
+            if val is not None and not np.isnan(val):
+                all_y_values.append(val)
+    
+    if all_y_values:
+        y_min = 0
+        y_max = max(all_y_values) * 1.1
+        for ax in axes[:len(hkl_list)]:
+            ax.set_ylim(y_min, y_max)
 
-    # Reference lines
-    ax.axhline(y=2, color='red', linestyle=':', alpha=0.7,
-              label='Precision limit (2 nm)')
-    ax.axhline(y=200, color='orange', linestyle=':', alpha=0.7,
-              label='Detection limit (200 nm)')
-
-    ax.set_xlabel('Peak (hkl)')
-    ax.set_ylabel('Crystallite Size (nm)')
-    ax.set_title('Scherrer Crystallite Size Analysis')
-    ax.set_xticks(x_positions)
-    ax.set_xticklabels(hkl_list)
-    ax.legend(loc='upper right', fontsize=9, ncol=2)
-
+    fig.suptitle('Scherrer Size Evolution by Peak', fontsize=16, fontweight='bold', y=1.02)
     plt.tight_layout()
 
     if output_path:
@@ -139,83 +138,108 @@ def plot_scherrer_sizes(
     return fig
 
 
-def plot_size_distribution(
-    sizes: List[float],
+def plot_scherrer_by_concentration(
+    data: List[Dict[str, Any]],
     output_path: Optional[str] = None,
     dpi: int = 1000,
     format: str = "png",
     show: bool = True,
-    figsize: Tuple[float, float] = (8, 6),
-    bins: int = 15,
-    sample_name: str = "Sample",
+    figsize: Tuple[float, float] = (11, 11), # Square figure to help subplots be square
+    instrument_limit: Optional[float] = None,
 ) -> plt.Figure:
-    """Plot crystallite size distribution histogram.
-    繪製晶粒尺寸分佈直方圖。
+    """Plot Scherrer size evolution with subplots by concentration.
     
-    Args:
-        sizes: List of crystallite sizes in nm.
-        output_path: Optional path to save figure.
-        dpi: Output resolution.
-        format: Output format.
-        show: Whether to display figure.
-        figsize: Figure size.
-        bins: Number of histogram bins.
-        sample_name: Name of the sample for title.
-        
-    Returns:
-        Matplotlib Figure object.
-
+    Creates 4 subplots (one per concentration), each showing 3 peak lines (111, 200, 220).
+    X-axis: Annealing Time, Y-axis: Crystallite Size (nm).
+    Subplots are square.
     """
     apply_axcsas_style()
-
-    sizes = np.array([s for s in sizes if np.isfinite(s) and s > 0])
-
-    if len(sizes) == 0:
-        raise ValueError("No valid size data")
-
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Histogram
-    n, bins_edges, patches = ax.hist(
-        sizes, bins=bins,
-        color='#0077BB',
-        alpha=0.7,
-        edgecolor='black',
-        linewidth=0.8
-    )
-
-    # Statistics
-    mean_size = np.mean(sizes)
-    std_size = np.std(sizes)
-    median_size = np.median(sizes)
-
-    # Add mean and median lines
-    ax.axvline(x=mean_size, color='red', linestyle='-', linewidth=2,
-              label=f'Mean: {mean_size:.1f} nm')
-    ax.axvline(x=median_size, color='green', linestyle='--', linewidth=2,
-              label=f'Median: {median_size:.1f} nm')
-
-    # Add standard deviation region
-    ax.axvspan(mean_size - std_size, mean_size + std_size,
-              alpha=0.2, color='red', label=f'±1σ: {std_size:.1f} nm')
-
-    ax.set_xlabel('Crystallite Size (nm)')
-    ax.set_ylabel('Frequency')
-    ax.set_title(f'Crystallite Size Distribution - {sample_name}')
-    ax.legend(loc='upper right')
-
-    # Add text box with statistics
-    textstr = f'N = {len(sizes)}\nMean = {mean_size:.1f} ± {std_size:.1f} nm'
-    props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
-    ax.text(0.02, 0.98, textstr, transform=ax.transAxes, fontsize=10,
-           verticalalignment='top', bbox=props)
-
+    
+    # Get unique concentrations and peaks
+    concentrations = sorted(set(sample.get('concentration', 0) for sample in data))
+    all_hkls = set()
+    for sample in data:
+        for peak in sample.get('peaks', []):
+            all_hkls.add(peak['hkl'])
+    hkl_list = sorted(list(all_hkls))
+    
+    if len(concentrations) == 0:
+        raise ValueError("No concentration data found")
+    
+    # Create subplots: one per concentration (2x2 layout for 4 concentrations)
+    n_conc = len(concentrations)
+    n_cols = 2
+    n_rows = (n_conc + 1) // 2
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+    axes = axes.flatten()
+    
+    # Colors for each peak direction
+    peak_colors = get_color_palette(len(hkl_list))
+    hkl_color_map = dict(zip(hkl_list, peak_colors))
+    
+    # Collect all size values for consistent Y-axis
+    all_sizes = []
+    for sample in data:
+        for peak in sample.get('peaks', []):
+            val = peak.get('size_nm')
+            if val is not None and not np.isnan(val):
+                all_sizes.append(val)
+    
+    y_min = 0
+    y_max = max(all_sizes) * 1.1 if all_sizes else 100.0
+    
+    # Plot each concentration
+    for idx, conc in enumerate(concentrations):
+        ax = axes[idx]
+        
+        # Plot each peak direction
+        for hkl in hkl_list:
+            x_values = []
+            y_values = []
+            
+            for sample in data:
+                if sample.get('concentration', 0) != conc:
+                    continue
+                time_val = sample.get('time', 0)
+                for peak in sample.get('peaks', []):
+                    if peak['hkl'] == hkl:
+                        val = peak.get('size_nm')
+                        if val is not None and not np.isnan(val):
+                            x_values.append(time_val)
+                            y_values.append(val)
+            
+            if x_values:
+                color = hkl_color_map[hkl]
+                # Sort by time
+                sorted_indices = np.argsort(x_values)
+                x_sorted = np.array(x_values)[sorted_indices]
+                y_sorted = np.array(y_values)[sorted_indices]
+                
+                ax.scatter(x_sorted, y_sorted, c=color, s=60, alpha=0.8,
+                          edgecolors='black', linewidths=0.5)
+                ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle='-',
+                       linewidth=2.0, label=hkl)
+        
+        ax.set_xlabel('Annealing Time (hours)')
+        ax.set_ylabel('Crystallite Size (nm)')
+        ax.set_title(f'{conc} mL/1.5L', fontsize=12, fontweight='bold')
+        ax.legend(loc='upper right', fontsize=8)
+        ax.set_ylim(y_min, y_max)
+        ax.grid(True, alpha=0.3)
+        ax.set_box_aspect(1)  # Make subplot square
+    
+    # Hide unused axes
+    for idx in range(len(concentrations), len(axes)):
+        axes[idx].set_visible(False)
+    
+    fig.suptitle('Scherrer Size Evolution by Concentration', fontsize=16, fontweight='bold', y=1.02)
     plt.tight_layout()
-
+    
     if output_path:
         save_figure(fig, output_path, dpi=dpi, format=format)
-
+    
     if show:
         plt.show()
-
+    
     return fig
