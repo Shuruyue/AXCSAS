@@ -123,22 +123,25 @@ def plot_texture_polar(
 
 def plot_tc_evolution(
     data: List[Dict[str, Any]],
-    x_param: str = "concentration",
+    x_param: str = "time",
     output_path: Optional[str] = None,
     dpi: int = 1000,
     format: str = "png",
     show: bool = True,
-    figsize: Tuple[float, float] = (12, 6),
+    figsize: Tuple[float, float] = (15, 5.5),
 ) -> plt.Figure:
-    """Plot TC evolution across samples.
-    繪製 TC 隨樣品參數演化圖。
+    """Plot TC evolution across samples with subplots by peak direction.
+    繪製 TC 隨樣品參數演化圖（按峰方向分子圖）。
+    
+    Uses 3 subplots (one for each hkl), grouped by concentration.
+    Similar structure to FWHM evolution plots.
     
     Args:
         data: List of dictionaries with keys:
             - 'name': Sample name
-            - 'concentration' or 'time': X-axis value
+            - 'concentration' and 'time': Sample parameters
             - 'tc_values': Dict mapping hkl to TC value
-        x_param: X-axis parameter ("concentration" or "time").
+        x_param: X-axis parameter ("time").
         output_path: Optional path to save figure.
         dpi: Output resolution.
         format: Output format.
@@ -147,14 +150,6 @@ def plot_tc_evolution(
         
     Returns:
         Matplotlib Figure object.
-        
-    Example:
-        >>> data = [
-        ...     {'concentration': 0, 'tc_values': {'(111)': 1.2, '(200)': 0.8}},
-        ...     {'concentration': 9, 'tc_values': {'(111)': 1.4, '(200)': 0.6}},
-        ... ]
-        >>> fig = plot_tc_evolution(data, x_param='concentration')
-
     """
     apply_axcsas_style()
 
@@ -164,50 +159,110 @@ def plot_tc_evolution(
         all_hkls.update(sample.get('tc_values', {}).keys())
 
     hkl_list = sorted(list(all_hkls))
+    n_hkls = len(hkl_list)
 
-    if not hkl_list:
+    if n_hkls == 0:
         raise ValueError("No TC data found in input")
 
-    fig, ax = plt.subplots(figsize=figsize)
+    # Create subplots for each hkl (3 side-by-side)
+    n_cols = min(n_hkls, 3)
+    n_rows = (n_hkls + n_cols - 1) // n_cols
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+    axes = axes.flatten()
 
     # X-axis label
     x_labels = {
-        'concentration': 'Leveler Concentration (mL/L)',
-        'time': 'Plating Time (hours)',
-        'age': 'Sample Age (hours)',
+        'time': 'Annealing Time (hours)',
+        'concentration': 'Leveler Concentration (mL/1.5L)',
     }
     x_label = x_labels.get(x_param, x_param)
 
-    colors = get_color_palette(len(hkl_list))
+    # Group by concentration (when plotting vs time)
+    concentrations = sorted(set(sample.get('concentration', 0) for sample in data))
+    colors = get_color_palette(len(concentrations))
+    conc_color_map = dict(zip(concentrations, colors))
 
-    # Plot each hkl direction
+    # Plot each hkl in its own subplot
     for idx, hkl in enumerate(hkl_list):
-        x_values = []
-        tc_values = []
-
-        for sample in data:
-            x_val = sample.get(x_param, sample.get('concentration', 0))
+        ax = axes[idx]
+        
+        # Separate high-quality and low-quality data
+        high_quality_data = [s for s in data if s.get('high_quality', True)]
+        low_quality_data = [s for s in data if not s.get('high_quality', True)]
+        
+        # First, plot low-quality data as gray points (no lines)
+        for sample in low_quality_data:
+            x_val = sample.get(x_param, 0)
             tc_dict = sample.get('tc_values', {})
             if hkl in tc_dict:
-                x_values.append(x_val)
-                tc_values.append(tc_dict[hkl])
+                ax.scatter(x_val, tc_dict[hkl], 
+                          c='gray', s=60, alpha=0.5, zorder=1,
+                          marker='o', edgecolors='none')
+        
+        # Plot high-quality data with colored lines
+        for conc in concentrations:
+            x_values = []
+            tc_values = []
+            
+            for sample in high_quality_data:
+                if sample.get('concentration', 0) != conc:
+                    continue
+                x_val = sample.get(x_param, 0)
+                tc_dict = sample.get('tc_values', {})
+                if hkl in tc_dict:
+                    x_values.append(x_val)
+                    tc_values.append(tc_dict[hkl])
+            
+            if x_values:
+                # Sort by x-value
+                sorted_indices = np.argsort(x_values)
+                x_sorted = np.array(x_values)[sorted_indices]
+                tc_sorted = np.array(tc_values)[sorted_indices]
+                
+                color = conc_color_map[conc]
+                label = f'{conc} mL/1.5L'
+                
+                ax.plot(x_sorted, tc_sorted, 'o-', color=color,
+                       linewidth=2, markersize=8, 
+                       markeredgecolor='black', markeredgewidth=0.5,
+                       label=label, zorder=2)
+        
+        # Add legend entry for gray points if any exist
+        if low_quality_data:
+            ax.scatter([], [], c='gray', s=60, alpha=0.5, 
+                      marker='o', label='R² < 0.995 (low quality)')
+        
+        # Random orientation reference
+        ax.axhline(y=1.0, color='red', linestyle='--', linewidth=2, alpha=0.7)
+        
+        # Random zone (0.9-1.1)
+        ax.axhspan(0.9, 1.1, alpha=0.1, color='green', label='Random zone')
+        
+        ax.set_xlabel(x_label)
+        ax.set_ylabel('Texture Coefficient (TC)')
+        ax.set_title(f'{hkl} Peak', fontsize=12, fontweight='bold')
+        ax.legend(loc='best', fontsize=8)
+        ax.grid(True, alpha=0.3)
+        ax.set_box_aspect(1)
 
-        if x_values:
-            ax.plot(x_values, tc_values, 'o-', color=colors[idx],
-                   linewidth=2, markersize=8, label=hkl)
+    # Hide unused axes
+    for idx in range(len(hkl_list), len(axes)):
+        axes[idx].set_visible(False)
 
-    # Random orientation reference
-    ax.axhline(y=1.0, color='red', linestyle='--', linewidth=2,
-              alpha=0.7, label='Random (TC=1)')
+    # Set consistent Y-axis limits
+    all_tc = []
+    for sample in data:
+        tc_dict = sample.get('tc_values', {})
+        all_tc.extend(tc_dict.values())
+    
+    if all_tc:
+        y_min = min(0.5, min(all_tc) * 0.9)
+        y_max = max(1.5, max(all_tc) * 1.1)
+        for ax in axes[:len(hkl_list)]:
+            ax.set_ylim(y_min, y_max)
 
-    # Random zone (0.9-1.1)
-    ax.axhspan(0.9, 1.1, alpha=0.1, color='green', label='Random zone')
-
-    ax.set_xlabel(x_label)
-    ax.set_ylabel('Texture Coefficient (TC)')
-    ax.set_title('Texture Coefficient Evolution')
-    ax.legend(loc='best', fontsize=10)
-
+    fig.suptitle('Texture Coefficient Evolution by Peak', fontsize=14, fontweight='bold', y=1.02)
     plt.tight_layout()
 
     if output_path:

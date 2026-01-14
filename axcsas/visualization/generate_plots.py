@@ -148,11 +148,25 @@ def convert_samples_to_plot_data(samples: List[SampleData]) -> List[Dict]:
                      fwhm_instrumental=0.05
                  )
                  
+                 # Calculate size error based on FWHM error
+                 # D = Kλ / (β cosθ)  => |dD/dβ| = D / β
+                 # Error(D) = D * Error(β) / β
+                 # Use sample broadening (sr.fwhm_sample_rad) for β, but fwhm_error is in degrees
+                 # Convert error to radians: err_rad = np.radians(fwhm_error)
+                 # Error(D) = D * err_rad / beta_rad = D * fwhm_error_deg / fwhm_sample_deg
+                 
+                 fwhm_err = res.get('fwhm_error', 0.0)
+                 size_err = 0.0
+                 if sr.size_nm and sr.fwhm_sample > 0 and fwhm_err > 0:
+                     size_err = sr.size_nm * (fwhm_err / sr.fwhm_sample)
+                 
                  peaks_data.append({
                      'hkl': hkl_str,
                      'fwhm': res['fwhm'],
+                     'fwhm_error': fwhm_err,
                      'intensity': res['amplitude'],
                      'size_nm': sr.size_nm,
+                     'size_err': size_err,
                      'validity': sr.validity_flag.value,
                      'fit_quality': 'high' if not res.get('low_quality', False) else 'low',
                  })

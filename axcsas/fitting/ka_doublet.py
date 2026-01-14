@@ -40,6 +40,7 @@ class DoubletFitResult:
     r_squared: float       # Goodness of fit
     success: bool
     message: str
+    fwhm_error: float = 0.0    # Standard error of FWHM
     fitted_curve: Optional[np.ndarray] = None
     
     @property
@@ -347,6 +348,21 @@ class DoubletFitter:
                     if r_sq > best_r_sq:
                         best_r_sq = r_sq
                         center_ka2 = calculate_ka2_position(popt[0])
+                        
+                        # Calculate standard errors from Jacobian
+                        fwhm_err = 0.0
+                        try:
+                            # Estimate covariance matrix
+                            jac = result.jac
+                            # s_sq = cost * 2 / (m - n)
+                            s_sq = 2 * result.cost / (len(intensity) - len(popt))
+                            pcov = s_sq * np.linalg.inv(jac.T @ jac)
+                            perr = np.sqrt(np.diag(pcov))
+                            fwhm_err = perr[2] # FWHM is index 2
+                        except Exception:
+                            # Fallback error estimation (e.g. 5% relative error if calc fails)
+                            fwhm_err = popt[2] * 0.05
+                            
                         best_result = DoubletFitResult(
                             center_ka1=popt[0],
                             center_ka2=center_ka2,
@@ -357,7 +373,8 @@ class DoubletFitter:
                             r_squared=r_sq,
                             success=True,
                             message=f"Doublet fit converged (R²={r_sq:.4f}, η={popt[3]:.2f})",
-                            fitted_curve=fitted
+                            fitted_curve=fitted,
+                            fwhm_error=fwhm_err
                         )
             except Exception:
                 continue

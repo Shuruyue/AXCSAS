@@ -95,15 +95,36 @@ def plot_scherrer_evolution_by_peak(
                 x_sorted = np.array(x_values)[sorted_indices]
                 y_sorted = np.array(y_values)[sorted_indices]
                 
-                label = label_format(group_val)
-                ax.scatter(x_sorted, y_sorted, c=color, s=60, alpha=0.8, 
-                          edgecolors='black', linewidths=0.5)
-                ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle='-',
-                       linewidth=2.0, label=label)
+                # Retrieve errors (need to match x_values logic)
+                y_errs = []
+                for sample in data:
+                    if sample.get(group_key, 0) == group_val:
+                         for peak in sample.get('peaks', []):
+                             if peak['hkl'] == hkl and peak.get('size_nm') is not None and not np.isnan(peak.get('size_nm')):
+                                 y_errs.append(peak.get('size_err', 0.0))
+                
+                # Ensure length matches
+                if len(y_errs) == len(x_values):
+                    e_sorted = np.array(y_errs)[sorted_indices]
+                    
+                    label = label_format(group_val)
+                    ax.errorbar(x_sorted, y_sorted, yerr=e_sorted, fmt='o', c=color, markersize=8,
+                                ecolor=color, elinewidth=1.5, capsize=4, alpha=0.8,
+                                markeredgecolor='black', markeredgewidth=0.5, label=label)
+                    ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle='-', linewidth=2.0)
 
         ax.set_xlabel(x_label)
         ax.set_ylabel('Crystallite Size (nm)')
         ax.set_title(f'{hkl} Peak')
+        
+        # Instrument limit visualization
+        # 1. Solid red for >300 nm (fully unreliable - beyond instrument resolution)
+        ax.axhspan(300, 1000, color='red', alpha=0.15, label='>300 nm (Unreliable)')
+        # 2. Hatched pattern for 110-300 nm (transition zone)
+        ax.axhspan(110, 300, facecolor='none', edgecolor='red', hatch='///', alpha=0.3, label='110-300 nm (Caution)')
+        # 3. Center line at 205 nm
+        ax.axhline(y=205, color='red', linestyle='--', alpha=0.5, linewidth=1.5)
+        
         ax.legend(loc='upper right', fontsize=8, ncol=2)
         ax.set_box_aspect(1)  # Make subplot square
         ax.grid(True, alpha=0.3)
@@ -216,14 +237,34 @@ def plot_scherrer_by_concentration(
                 x_sorted = np.array(x_values)[sorted_indices]
                 y_sorted = np.array(y_values)[sorted_indices]
                 
-                ax.scatter(x_sorted, y_sorted, c=color, s=60, alpha=0.8,
-                          edgecolors='black', linewidths=0.5)
-                ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle='-',
-                       linewidth=2.0, label=hkl)
+                # Retrieve errors
+                y_errs = []
+                for sample in data:
+                    if sample.get('concentration', 0) == conc:
+                         for peak in sample.get('peaks', []):
+                             if peak['hkl'] == hkl and peak.get('size_nm') is not None and not np.isnan(peak.get('size_nm')):
+                                 y_errs.append(peak.get('size_err', 0.0))
+                
+                if len(y_errs) == len(x_values):
+                    e_sorted = np.array(y_errs)[sorted_indices]
+                    
+                    ax.errorbar(x_sorted, y_sorted, yerr=e_sorted, fmt='o', c=color, markersize=8,
+                                ecolor=color, elinewidth=1.5, capsize=4, alpha=0.8,
+                                markeredgecolor='black', markeredgewidth=0.5, label=hkl)
+                    ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle='-', linewidth=2.0)
         
         ax.set_xlabel('Annealing Time (hours)')
         ax.set_ylabel('Crystallite Size (nm)')
         ax.set_title(f'{conc} mL/1.5L', fontsize=12, fontweight='bold')
+        
+        # Instrument limit visualization
+        # 1. Solid red for >300 nm (fully unreliable - beyond instrument resolution)
+        ax.axhspan(300, 1000, color='red', alpha=0.15, label='>300 nm (Unreliable)')
+        # 2. Hatched pattern for 110-300 nm (transition zone)
+        ax.axhspan(110, 300, facecolor='none', edgecolor='red', hatch='///', alpha=0.3, label='110-300 nm (Caution)')
+        # 3. Center line at 205 nm
+        ax.axhline(y=205, color='red', linestyle='--', alpha=0.5, linewidth=1.5)
+        
         ax.legend(loc='upper right', fontsize=8)
         ax.set_ylim(y_min, y_max)
         ax.grid(True, alpha=0.3)

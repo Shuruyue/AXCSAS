@@ -112,32 +112,46 @@ def plot_fwhm_evolution(
             x_values = []
             y_values = []
             
+            # Re-collect x, y, y_err
+            x_vals = []
+            y_vals = []
+            y_errs = []
+            
             for sample in data:
                 if sample.get(group_key, 0) != group_val:
                     continue
                 x_val = sample.get(x_param, sample.get('time', 0))
                 for peak in sample.get('peaks', []):
                     if peak['hkl'] == hkl:
-                        x_values.append(x_val)
-                        y_values.append(peak['fwhm'])
-            
-            if x_values:
+                        x_vals.append(x_val)
+                        y_vals.append(peak['fwhm'])
+                        y_errs.append(peak.get('fwhm_error', 0.0))
+                            
+            if x_vals:
                 color = group_color_map[group_val]
-                # Sort by x-value for proper line connection
-                sorted_indices = np.argsort(x_values)
-                x_sorted = np.array(x_values)[sorted_indices]
-                y_sorted = np.array(y_values)[sorted_indices]
+                # Sort
+                indices = np.argsort(x_vals)
+                x_s = np.array(x_vals)[indices]
+                y_s = np.array(y_vals)[indices]
+                e_s = np.array(y_errs)[indices]
                 
                 label = label_format(group_val)
-                ax.scatter(x_sorted, y_sorted, c=color, s=60, alpha=0.8, 
-                          edgecolors='black', linewidths=0.5)
-                ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle='-',
-                       linewidth=2.0, label=label)
+                
+                # Plot with error bars
+                ax.errorbar(x_s, y_s, yerr=e_s, fmt='o', c=color, markersize=8, 
+                           ecolor=color, elinewidth=1.5, capsize=4, alpha=0.8,
+                           markeredgecolor='black', markeredgewidth=0.5, label=label)
+                ax.plot(x_s, y_s, c=color, alpha=0.6, linestyle='-', linewidth=2.0)
 
-        # Instrument limit line
-        if instrument_limit is not None:
-            ax.axhline(y=instrument_limit, color='red', linestyle=':', alpha=0.7,
-                      label=f'Instrument limit ({instrument_limit}°)')
+        # Instrument limit visualization
+        # 1. Solid red for <0.03° (fully unreliable - below instrument resolution)
+        ax.axhspan(0, 0.03, color='red', alpha=0.15, label='<0.03° (Unreliable)')
+        # 2. Hatched pattern for 0.03-0.08° (transition zone)
+        ax.axhspan(0.03, 0.08, facecolor='none', edgecolor='red', hatch='///', alpha=0.3, label='0.03-0.08° (Caution)')
+        # 3. Center line at 0.055°
+        ax.axhline(y=0.055, color='red', linestyle='--', alpha=0.5, linewidth=1.5)
+
+
 
         ax.set_xlabel(x_label)
         ax.set_ylabel('FWHM (°)')
@@ -247,10 +261,10 @@ def plot_fwhm_by_peak(
             linewidth=0.5
         )
 
-    # Instrument limit line
+    # Instrument limit range (Typical: 0.03-0.08)
+    ax.axhspan(0.03, 0.08, color='red', alpha=0.1, label='Instrument limit (0.03°-0.08°)')
     if instrument_limit is not None:
-        ax.axhline(y=instrument_limit, color='red', linestyle=':', linewidth=2,
-                  label=f'Instrument limit ({instrument_limit}°)')
+        ax.axhline(y=instrument_limit, color='red', linestyle='--', alpha=0.3, linewidth=1)
 
     ax.set_xlabel('Peak (hkl)')
     ax.set_ylabel('FWHM (°)')
@@ -340,31 +354,40 @@ def plot_fwhm_by_concentration(
             x_values = []
             y_values = []
             
+            x_vals = []
+            y_vals = []
+            y_errs = []
+            
             for sample in data:
                 if sample.get('concentration', 0) != conc:
                     continue
                 time_val = sample.get('time', 0)
                 for peak in sample.get('peaks', []):
                     if peak['hkl'] == hkl:
-                        x_values.append(time_val)
-                        y_values.append(peak['fwhm'])
+                        x_vals.append(time_val)
+                        y_vals.append(peak['fwhm'])
+                        y_errs.append(peak.get('fwhm_error', 0.0))
             
-            if x_values:
+            if x_vals:
                 color = hkl_color_map[hkl]
                 # Sort by time
-                sorted_indices = np.argsort(x_values)
-                x_sorted = np.array(x_values)[sorted_indices]
-                y_sorted = np.array(y_values)[sorted_indices]
+                indices = np.argsort(x_vals)
+                x_s = np.array(x_vals)[indices]
+                y_s = np.array(y_vals)[indices]
+                e_s = np.array(y_errs)[indices]
                 
-                ax.scatter(x_sorted, y_sorted, c=color, s=60, alpha=0.8,
-                          edgecolors='black', linewidths=0.5)
-                ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle='-',
-                       linewidth=2.0, label=hkl)
+                ax.errorbar(x_s, y_s, yerr=e_s, fmt='o', c=color, markersize=8,
+                           ecolor=color, elinewidth=1.5, capsize=4, alpha=0.8,
+                           markeredgecolor='black', markeredgewidth=0.5, label=hkl)
+                ax.plot(x_s, y_s, c=color, alpha=0.6, linestyle='-', linewidth=2.0)
         
-        # Instrument limit line
-        if instrument_limit is not None:
-            ax.axhline(y=instrument_limit, color='red', linestyle=':', alpha=0.7,
-                      label=f'Instrument limit ({instrument_limit}°)')
+        # Instrument limit visualization
+        # 1. Solid red for <0.03° (fully unreliable - below instrument resolution)
+        ax.axhspan(0, 0.03, color='red', alpha=0.15, label='<0.03° (Unreliable)')
+        # 2. Hatched pattern for 0.03-0.08° (transition zone)
+        ax.axhspan(0.03, 0.08, facecolor='none', edgecolor='red', hatch='///', alpha=0.3, label='0.03-0.08° (Caution)')
+        # 3. Center line at 0.055°
+        ax.axhline(y=0.055, color='red', linestyle='--', alpha=0.5, linewidth=1.5)
         
         ax.set_xlabel('Annealing Time (hours)')
         ax.set_ylabel('FWHM (°)')

@@ -135,6 +135,7 @@ def fit_peak_with_diagnosis(
                 result['center_ka2'] = fit_result.center_ka2
                 result['amplitude'] = fit_result.amplitude_ka1
                 result['fwhm'] = fit_result.fwhm
+                result['fwhm_error'] = getattr(fit_result, 'fwhm_error', 0.0) # Get error or default to 0
                 result['eta'] = fit_result.eta
                 result['r_squared'] = fit_result.r_squared
                 result['fitted_curve'] = fit_result.fitted_curve
