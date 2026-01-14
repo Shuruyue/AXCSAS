@@ -27,6 +27,7 @@ from axcsas.visualization.style import (
 from axcsas.visualization.fwhm_plots import (
     plot_fwhm_evolution,
     plot_fwhm_by_peak,
+    plot_fwhm_by_concentration,
 )
 from axcsas.visualization.scherrer_plots import (
     plot_scherrer_sizes,
@@ -201,21 +202,32 @@ def generate_fwhm_plots(samples: List[SampleData], output_dir: Path) -> int:
     
     count = 0
     
-    # Plot 1: FWHM Evolution by concentration
+    # Plot 1: FWHM Evolution by Time (Annealing Time, grouped by concentration)
     try:
         fig = plot_fwhm_evolution(
             plot_data,
             x_param='time',
-            output_path=str(output_dir / 'fwhm_evolution_by_peak.png'),
+            output_path=str(output_dir / 'fwhm_evolution_by_time.png'),
             show=False,
             instrument_limit=0.05
         )
         count += 1
-        print(f"  ✓ fwhm_evolution_by_peak.png")
+        print(f"  ✓ fwhm_evolution_by_time.png")
     except Exception as e:
-        print(f"  ✗ fwhm_evolution_by_peak.png: {e}")
+        print(f"  ✗ fwhm_evolution_by_time.png: {e}")
     
-    # Note: fwhm_by_concentration removed per user request
+    # Plot 2: FWHM by Concentration (4 subplots, 3 peak lines each)
+    try:
+        fig = plot_fwhm_by_concentration(
+            plot_data,
+            output_path=str(output_dir / 'fwhm_by_concentration.png'),
+            show=False,
+            instrument_limit=0.05
+        )
+        count += 1
+        print(f"  ✓ fwhm_by_concentration.png")
+    except Exception as e:
+        print(f"  ✗ fwhm_by_concentration.png: {e}")
     
     return count
 
