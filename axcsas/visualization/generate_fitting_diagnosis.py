@@ -167,8 +167,9 @@ def fit_peak_with_diagnosis(
             best_params = None
             best_fitted = None
             
-            # Try multiple initial eta values
-            for eta_init in [0.3, 0.5, 0.7, 0.9]:
+            # Expanded multi-start optimization for R² ≥ 0.995 target
+            # Try multiple initial eta and amplitude values
+            for eta_init in [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
                 x0 = np.array([peak_theta, peak_int * 0.9, initial_fwhm, eta_init, 
                               bg_coeffs[0], bg_coeffs[1], bg_coeffs[2]])
                 
@@ -215,7 +216,8 @@ def fit_peak_with_diagnosis(
                 except Exception:
                     continue
             
-            if best_params is not None and best_r2 > 0.9:
+            # Accept results with R² > 0.85, but flag low quality if < 0.995
+            if best_params is not None and best_r2 > 0.85:
                 result['success'] = True
                 result['center'] = best_params[0]
                 result['center_err'] = best_errors[0] if best_errors[0] > 0 else 0.001
@@ -230,6 +232,8 @@ def fit_peak_with_diagnosis(
                 result['dof'] = best_dof
                 result['method'] = 'enhanced-pv'
                 result['fitted_curve'] = best_fitted
+                # Flag low quality fits (R² < 0.995)
+                result['low_quality'] = best_r2 < 0.995
     except Exception as e:
         result['error'] = str(e)
     
@@ -318,7 +322,6 @@ def generate_sample_fitting_plot(
                 half_max = amp / 2 + np.min(fit_result['fitted_curve'])
                 ax.hlines(y=half_max, xmin=center - fwhm/2, xmax=center + fwhm/2,
                          color='green', linewidth=1.5, label=f'FWHM={fwhm:.4f}°')
-                
                 # Get uncertainties (with fallbacks)
                 center_err = fit_result.get('center_err', 0.001)
                 fwhm_err = fit_result.get('fwhm_err', 0.0001)
@@ -326,9 +329,13 @@ def generate_sample_fitting_plot(
                 chi2_red = fit_result.get('chi2_red', 1.0)
                 r2 = fit_result['r_squared']
                 eta = fit_result['eta']
+                low_quality = fit_result.get('low_quality', False)
                 
                 # Info text box with uncertainties
+                # Add warning if R² < 0.995
+                quality_warning = "⚠️ R² < 0.995\n" if low_quality else ""
                 info_text = (
+                    f"{quality_warning}"
                     f"R² = {r2:.4f}\n"
                     f"χ²ᵣₑₐ = {chi2_red:.3f}\n"
                     f"2θ = {center:.3f}° ± {center_err:.3f}°\n"
@@ -336,9 +343,12 @@ def generate_sample_fitting_plot(
                     f"η = {eta:.3f} ± {eta_err:.3f}"
                 )
                 
+                # Use orange box if low quality
+                box_color = 'orange' if low_quality else 'white'
+                edge_color = 'red' if low_quality else 'gray'
                 ax.text(0.02, 0.98, info_text, transform=ax.transAxes,
                        fontsize=9, verticalalignment='top', family='monospace',
-                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor='gray'))
+                       bbox=dict(boxstyle='round', facecolor=box_color, alpha=0.9, edgecolor=edge_color))
                 
                 peaks_info.append({
                     'hkl': hkl,
@@ -371,7 +381,7 @@ def generate_sample_fitting_plot(
     
     # Save plot using visualization module
     output_path = output_dir / f'{sample_name}_fitting.png'
-    save_figure(fig, str(output_path), dpi=300)
+    save_figure(fig, str(output_path), dpi=1000)
     plt.close()
     
     return peaks_info
@@ -407,7 +417,7 @@ def main():
                 'filename': filepath.name,
                 'peaks': result
             })
-            print(f"  ✓ Saved (DPI: 300)")
+            print(f"  ✓ Saved (DPI: 1000)")
         else:
             print(f"  ✗ Failed")
     

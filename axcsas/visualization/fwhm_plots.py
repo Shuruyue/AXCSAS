@@ -22,7 +22,7 @@ def plot_fwhm_evolution(
     data: List[Dict[str, Any]],
     x_param: str = "concentration",
     output_path: Optional[str] = None,
-    dpi: int = 300,
+    dpi: int = 1000,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (12, 8),
@@ -166,7 +166,7 @@ def plot_fwhm_evolution(
 def plot_fwhm_by_peak(
     results: List[Dict[str, Any]],
     output_path: Optional[str] = None,
-    dpi: int = 300,
+    dpi: int = 1000,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (10, 6),

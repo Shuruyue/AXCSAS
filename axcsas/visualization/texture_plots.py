@@ -21,7 +21,7 @@ from .style import (
 def plot_texture_polar(
     tc_values: Dict[str, float],
     output_path: Optional[str] = None,
-    dpi: int = 300,
+    dpi: int = 1000,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (8, 8),
@@ -125,7 +125,7 @@ def plot_tc_evolution(
     data: List[Dict[str, Any]],
     x_param: str = "concentration",
     output_path: Optional[str] = None,
-    dpi: int = 300,
+    dpi: int = 1000,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (12, 6),

@@ -20,7 +20,7 @@ from .style import (
 def plot_scherrer_sizes(
     results: List[Dict[str, Any]],
     output_path: Optional[str] = None,
-    dpi: int = 300,
+    dpi: int = 1000,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (10, 6),
@@ -142,7 +142,7 @@ def plot_scherrer_sizes(
 def plot_size_distribution(
     sizes: List[float],
     output_path: Optional[str] = None,
-    dpi: int = 300,
+    dpi: int = 1000,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (8, 6),
