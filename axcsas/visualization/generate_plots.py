@@ -137,16 +137,28 @@ def convert_samples_to_plot_data(samples: List[SampleData]) -> List[Dict]:
                  use_doublet=False # Enhanced PV is the default/master method now
              )
              
+             hkl_str = f"({hkl_tuple[0]}{hkl_tuple[1]}{hkl_tuple[2]})"
+             
              if res['success']:
-                 hkl_str = f"({hkl_tuple[0]}{hkl_tuple[1]}{hkl_tuple[2]})"
                  peaks_data.append({
                      'hkl': hkl_str,
                      'fwhm': res['fwhm'],
-                     'intensity': res['amplitude'], # Approximate intensity
-                     # Note: Scherrer size in result.scherrer_results would be based on PIPELINE's FWHM.
-                     # If we want consistent Scherrer sizes, we should update Scherrer calculation too.
-                     # For now, user asked for FWHM consistency primarily.
+                     'intensity': res['amplitude'],
+                     'fit_quality': 'high' if not res.get('low_quality', False) else 'low',
                  })
+             else:
+                 # Fallback: use pipeline result if enhanced fitting fails
+                 # This ensures stable-state samples with very narrow (220) peaks are included
+                 if sample.result and sample.result.peaks:
+                     for pipeline_peak in sample.result.peaks:
+                         if pipeline_peak.hkl == hkl_tuple:
+                             peaks_data.append({
+                                 'hkl': hkl_str,
+                                 'fwhm': pipeline_peak.fwhm,
+                                 'intensity': pipeline_peak.intensity,
+                                 'fit_quality': 'fallback',  # Mark as fallback
+                             })
+                             break
 
         # Add Scherrer results if available (Note: These might be slightly inconsistent if FWHM differs)
         # To be purely consistent, we should recalculate Scherrer, but that's complex here.
