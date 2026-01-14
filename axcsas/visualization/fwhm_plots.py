@@ -314,7 +314,7 @@ def plot_fwhm_by_concentration(
     n_cols = 2
     n_rows = (n_conc + 1) // 2
     
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(11, 11), squeeze=False)
     axes = axes.flatten()
     
     # Colors for each peak direction
@@ -372,6 +372,7 @@ def plot_fwhm_by_concentration(
         ax.legend(loc='upper right', fontsize=8)
         ax.set_ylim(y_min, y_max)
         ax.grid(True, alpha=0.3)
+        ax.set_box_aspect(1)  # Make subplot square
     
     # Hide unused axes
     for idx in range(len(concentrations), len(axes)):
