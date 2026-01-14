@@ -21,13 +21,8 @@ from axcsas.fitting.pseudo_voigt import PseudoVoigt
 from axcsas.fitting.lm_optimizer import LMOptimizer
 from axcsas.fitting.ka_doublet import DoubletFitter
 
-# Import shared fitting API for data consistency
-from axcsas.visualization.fitting_api import (
-    fit_peak_simple,
-    fit_peak_doublet,
-    FittingResult,
-)
 # Import fitting function directly from diagnosis script for consistency
+# (fitting_api.py was removed; it caused R² regression)
 from axcsas.visualization.generate_fitting_diagnosis import fit_peak_with_diagnosis
 
 # Cu peak positions
