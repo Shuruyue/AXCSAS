@@ -75,39 +75,74 @@ class XRDDataLoader:
     
     def _load_bruker_txt(self) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Load Bruker TXT export format.
+        Load Bruker TXT export format with robust encoding handling.
         
         Format:
         - Header lines starting with special characters
         - Data section with 2θ and intensity columns
+        
+        Encoding strategy:
+        1. Try UTF-8 first (modern standard)
+        2. Fallback to Latin-1 if UTF-8 fails (legacy files)
+        3. Fallback to system locale as last resort
         """
         two_theta = []
         intensity = []
         in_data_section = False
         
-        with open(self.filepath, 'r', encoding='utf-8', errors='ignore') as f:
-            for line in f:
-                line = line.strip()
+        # Try UTF-8 encoding first
+        encodings_to_try = ['utf-8', 'latin-1', 'cp1252']
+        last_error = None
+        
+        for encoding in encodings_to_try:
+            try:
+                with open(self.filepath, 'r', encoding=encoding) as f:
+                    for line in f:
+                        line = line.strip()
+                        
+                        # Skip empty lines
+                        if not line:
+                            continue
+                        
+                        # Try to parse as data
+                        try:
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                theta = float(parts[0])
+                                inten = float(parts[1])
+                                two_theta.append(theta)
+                                intensity.append(inten)
+                                in_data_section = True
+                        except ValueError:
+                            # Not a data line, might be header
+                            if in_data_section:
+                                # We've passed the data section
+                                break
+                            continue
                 
-                # Skip empty lines
-                if not line:
-                    continue
-                
-                # Try to parse as data
-                try:
-                    parts = line.split()
-                    if len(parts) >= 2:
-                        theta = float(parts[0])
-                        inten = float(parts[1])
-                        two_theta.append(theta)
-                        intensity.append(inten)
-                        in_data_section = True
-                except ValueError:
-                    # Not a data line, might be header
-                    if in_data_section:
-                        # We've passed the data section
-                        break
-                    continue
+                # If we successfully read data, break out of encoding loop
+                if len(two_theta) > 0:
+                    if encoding != 'utf-8':
+                        # Log that fallback encoding was used
+                        self.metadata['encoding'] = encoding
+                        self.metadata['encoding_note'] = f'Fallback to {encoding} encoding'
+                    break
+                    
+            except UnicodeDecodeError as e:
+                last_error = e
+                # Clear any partial data and try next encoding
+                two_theta = []
+                intensity = []
+                in_data_section = False
+                continue
+        
+        # If all encodings failed, raise the last error
+        if len(two_theta) == 0 and last_error:
+            raise ValueError(
+                f"Failed to decode file with any encoding. "
+                f"Last error: {last_error}. "
+                f"Please check file format or try converting to UTF-8."
+            )
         
         return np.array(two_theta), np.array(intensity)
     

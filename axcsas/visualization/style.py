@@ -20,19 +20,8 @@ AXCSAS_STYLE: Dict[str, Any] = {
     'figure.facecolor': 'white',
     'figure.edgecolor': 'white',
 
-    # Save settings (ultra-high quality for journal publication)
-    # 超高品質期刊出版標準
-    #
-    # Rationale 選擇理由:
-    #   - Nature/Science journals: 300-600 dpi minimum requirement
-    #   - Professional printing: 1200-2400 dpi recommended
-    #   - Vector formats (PDF/SVG) preferred, but raster at 2400 dpi
-    #     ensures publication-ready quality for all formats
-    #
-    # Reference 參考:
-    #   - Nature Journal Figure Guidelines (2023)
-    #   - Science Magazine Author Instructions
-    #   - IEEE Graphics Checklist (1200+ dpi for line art)
+    # Save settings: 2400 DPI for journal publication
+    # Reference: Nature/Science guidelines (300-600 DPI minimum)
     'savefig.dpi': 2400,
     'savefig.facecolor': 'white',
     'savefig.edgecolor': 'white',
@@ -177,7 +166,7 @@ def create_figure(
 def save_figure(
     fig,
     filepath: str,
-    dpi: int = 2400,  # Ultra-high quality (期刊出版標準)
+    dpi: int = 2400,
     format: str = None,
     transparent: bool = False
 ) -> None:

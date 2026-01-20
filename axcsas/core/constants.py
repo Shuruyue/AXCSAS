@@ -138,17 +138,20 @@ MIN_BROADENING_RATIO = 1.2  # Minimum sample/instrumental FWHM ratio for reliabl
 
 # Fit quality thresholds / 擬合品質閾值
 # ═══════════════════════════════════════════════════════════════════════════
-# 使用者自定義 / USER-DEFINED PARAMETERS
+# USER-ADJUSTABLE THRESHOLDS 使用者可調整閾值
 # ═══════════════════════════════════════════════════════════════════════════
-# 這些閾值由使用者根據實驗需求設定，用於作圖與數據篩選
-# These thresholds are user-defined based on experimental requirements
-# for plotting and data filtering purposes.
+# These thresholds are user-defined and can be modified based on experimental
+# requirements and quality standards. Adjust these values as needed:
+# 這些閾值可根據實驗需求與品質標準調整，可依需求修改：
 #
-# 可根據需求調整至 0.99 或更高精確度
-# Can be adjusted to 0.99 or higher precision as needed
+# Example adjustments 調整範例:
+#   - For high-precision work: MAX_RWP_PERCENT = 5.0, MIN_R_SQUARED = 0.99
+#   - For routine analysis: MAX_RWP_PERCENT = 15.0, MIN_R_SQUARED = 0.90
+#   - For publication quality: MAX_RWP_PERCENT = 8.0, MIN_R_SQUARED = 0.995
 #
-# 參考文獻 Reference (一般指引):
+# Reference 參考 (general guidance):
 #   Young, R. A. (1993). "The Rietveld Method." Oxford University Press.
-#   (R_wp < 10% 為 Rietveld 精修一般可接受標準)
-MAX_RWP_PERCENT = 10.0       # Maximum acceptable Rwp (%) / 最大可接受 R_wp
-MIN_R_SQUARED = 0.95         # Minimum acceptable R² / 最小可接受 R²
+#   (R_wp < 10% is generally acceptable for Rietveld refinement)
+# ═══════════════════════════════════════════════════════════════════════════
+MAX_RWP_PERCENT = 10.0       # Maximum acceptable R_wp (%) - ADJUSTABLE
+MIN_R_SQUARED = 0.95         # Minimum acceptable R² - ADJUSTABLE

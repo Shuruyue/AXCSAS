@@ -202,7 +202,7 @@ def plot_texture_diagnosis(
     
     # Use save_figure for consistent DPI (2400)
     from axcsas.visualization.style import save_figure
-    save_figure(plt.gcf(), output_path)  # Uses default DPI=2400
+    save_figure(plt.gcf(), output_path)
     plt.close(fig)
 
 
@@ -345,7 +345,7 @@ def main():
             x_param='time',
             output_path=str(output_dir / "tc_evolution_by_time.png"),
             show=False,
-            dpi=2400,  # Ultra-high quality (期刊出版標準)
+            dpi=2400,
         )
         plt.close(fig)
         print("  ✓ tc_evolution_by_time.png")
@@ -359,7 +359,7 @@ def main():
             x_param='concentration',
             output_path=str(output_dir / "tc_evolution_by_concentration.png"),
             show=False,
-            dpi=2400,  # Ultra-high quality (期刊出版標準)
+            dpi=2400,
         )
         plt.close(fig)
         print("  ✓ tc_evolution_by_concentration.png")
@@ -386,7 +386,7 @@ def main():
                     output_path=str(output_dir / f"tc_polar_{sample_name}.png"),
                     show=False,
                     sample_name=sample_name,
-                    dpi=2400,  # Ultra-high quality (期刊出版標準)
+                    dpi=2400,
                 )
                 plt.close(fig)
                 print(f"  ✓ tc_polar_{sample_name}.png")

@@ -24,7 +24,7 @@ def plot_williamson_hall(
     fit_result: Optional[Dict[str, Any]] = None,
     hkl_labels: Optional[List[str]] = None,
     output_path: Optional[str] = None,
-    dpi: int = 2400,  # Ultra-high quality (期刊出版標準)
+    dpi: int = 2400,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (10, 7),
@@ -178,7 +178,7 @@ def plot_wh_residuals(
     fit_result: Optional[Dict[str, Any]] = None,
     hkl_labels: Optional[List[str]] = None,
     output_path: Optional[str] = None,
-    dpi: int = 2400,  # Ultra-high quality (期刊出版標準)
+    dpi: int = 2400,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (10, 5),

@@ -13,11 +13,8 @@ from axcsas.analysis.pipeline import (
     run_full_analysis,
     batch_analyze,
 )
-from axcsas.analysis.report_generator import (
-    ComprehensiveResult,
-    generate_comprehensive_report,
-    generate_csv_summary,
-)
+# report_generator.py has been removed - no longer available
+
 
 # Alias for backward compatibility  
 AnalysisPipeline = AXCSASPipeline
@@ -50,7 +47,4 @@ __all__ = [
     "PipelineResult",
     "run_full_analysis",
     "batch_analyze",
-    "ComprehensiveResult",
-    "generate_comprehensive_report",
-    "generate_csv_summary",
 ]

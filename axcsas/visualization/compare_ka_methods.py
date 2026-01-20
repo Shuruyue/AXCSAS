@@ -151,7 +151,7 @@ def compare_methods_for_sample(filepath: Path, output_dir: Path):
     
     plt.tight_layout()
     output_path = output_dir / f'{sample_name}_method_comparison.png'
-    plt.savefig(output_path, bbox_inches='tight', dpi=2400)  # Ultra-high quality
+    plt.savefig(output_path, bbox_inches='tight', dpi=2400)
     plt.close()
     
     return results

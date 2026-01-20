@@ -25,6 +25,7 @@ from axcsas.core.copper_crystal import CU_JCPDS_EXTENDED
 from axcsas.methods.scherrer import (
     ScherrerCalculator,
     ScherrerResult,
+    ValidityFlag,
 )
 from axcsas.methods.williamson_hall import (
     WilliamsonHallAnalyzer,
@@ -48,7 +49,7 @@ from axcsas.analysis.report_generator import (
     generate_csv_summary,
 )
 from axcsas.fitting.hkl_assignment import assign_hkl
-from axcsas.fitting.lm_optimizer import LMOptimizer, FitResult
+from axcsas.fitting.lm_optimizer import LMOptimizer
 from axcsas.fitting.pseudo_voigt import PseudoVoigt, PseudoVoigtParams
 
 
@@ -220,6 +221,82 @@ def parse_filename(filepath: str) -> Dict[str, Any]:
 # Peak Finding with Pseudo-Voigt Fitting
 # =============================================================================
 
+def _estimate_fwhm_simple(
+    theta_range: np.ndarray,
+    int_range: np.ndarray,
+    idx_max: int,
+    peak_int: float
+) -> float:
+    """Estimate FWHM using half-maximum method."""
+    half_max = peak_int / 2
+    
+    left_idx = idx_max
+    while left_idx > 0 and int_range[left_idx] > half_max:
+        left_idx -= 1
+    
+    right_idx = idx_max
+    while right_idx < len(int_range) - 1 and int_range[right_idx] > half_max:
+        right_idx += 1
+    
+    return max(theta_range[right_idx] - theta_range[left_idx], 0.1)
+
+
+def _fit_peak_pseudo_voigt(
+    theta_range: np.ndarray,
+    int_range: np.ndarray,
+    peak_theta: float,
+    peak_int: float,
+    initial_fwhm: float
+) -> Tuple[bool, float, float, float, float, float]:
+    """Try Pseudo-Voigt fitting. Returns (success, theta, intensity, fwhm, eta, area)."""
+    try:
+        optimizer = LMOptimizer(max_iterations=500, tolerance=1e-6)
+        
+        initial_guess = PseudoVoigtParams(
+            center=peak_theta,
+            amplitude=peak_int,
+            fwhm=initial_fwhm,
+            eta=0.5
+        )
+        
+        fit_result = optimizer.fit_single_peak(theta_range, int_range, initial_guess=initial_guess)
+        
+        if fit_result.success and fit_result.r_squared > 0.8:
+            fitted_curve = PseudoVoigt.profile(
+                theta_range, fit_result.params.center,
+                fit_result.params.amplitude, fit_result.params.fwhm, fit_result.params.eta
+            )
+            try:
+                area = np.trapezoid(fitted_curve, theta_range)
+            except AttributeError:
+                area = np.trapz(fitted_curve, theta_range)
+            
+            return (
+                True,
+                fit_result.params.center,
+                fit_result.params.amplitude,
+                fit_result.params.fwhm,
+                fit_result.params.eta,
+                area
+            )
+    except Exception:
+        pass
+    
+    return False, peak_theta, peak_int, initial_fwhm, 0.5, 0.0
+
+
+def _calculate_peak_area_simple(
+    theta_range: np.ndarray,
+    int_range: np.ndarray
+) -> float:
+    """Calculate peak area using trapezoidal integration."""
+    try:
+        return np.trapezoid(int_range, theta_range)
+    except AttributeError:
+        return np.trapz(int_range, theta_range)
+
+
+
 def find_peak_in_range(
     two_theta: np.ndarray,
     intensity: np.ndarray,
@@ -230,14 +307,12 @@ def find_peak_in_range(
     """
     Find peak near expected position using Pseudo-Voigt fitting.
     
-    使用 Pseudo-Voigt 擬合找到峰位附近的峰值。
-    
     Args:
         two_theta: 2θ array
         intensity: Intensity array
         center: Expected peak center position
         window: Search window (degrees)
-        use_pv_fitting: If True, use Pseudo-Voigt fitting; otherwise use simple method
+        use_pv_fitting: If True, use Pseudo-Voigt fitting
         
     Returns:
         PeakData with fitted parameters, or None if no peak found
@@ -250,101 +325,30 @@ def find_peak_in_range(
     theta_range = two_theta[mask]
     int_range = intensity[mask]
     
-    # Find maximum for initial guess
+    # Find maximum
     idx_max = np.argmax(int_range)
     peak_theta = theta_range[idx_max]
     peak_int = int_range[idx_max]
     
-    # Check minimum intensity
     if peak_int < 50:
         return None
     
-    # Default values (will be overwritten by fitting)
-    fwhm = 0.2
-    eta = 0.5
-    fit_r_squared = 0.0
-    area = 0.0
+    # Estimate initial FWHM
+    initial_fwhm = _estimate_fwhm_simple(theta_range, int_range, idx_max, peak_int)
     
+    # Try Pseudo-Voigt fitting
     if use_pv_fitting:
-        # =====================================================================
-        # Pseudo-Voigt Fitting (Phase 03)
-        # =====================================================================
-        try:
-            optimizer = LMOptimizer(max_iterations=500, tolerance=1e-6)
-            
-            # Create initial guess based on simple FWHM estimate
-            half_max = peak_int / 2
-            left_idx = idx_max
-            while left_idx > 0 and int_range[left_idx] > half_max:
-                left_idx -= 1
-            right_idx = idx_max
-            while right_idx < len(int_range) - 1 and int_range[right_idx] > half_max:
-                right_idx += 1
-            initial_fwhm = max(theta_range[right_idx] - theta_range[left_idx], 0.1)
-            
-            initial_guess = PseudoVoigtParams(
-                center=peak_theta,
-                amplitude=peak_int,
-                fwhm=initial_fwhm,
-                eta=0.5  # Start with mixed Gaussian-Lorentzian
-            )
-            
-            fit_result = optimizer.fit_single_peak(
-                theta_range, int_range, initial_guess=initial_guess
-            )
-            
-            if fit_result.success and fit_result.r_squared > 0.8:
-                # Use fitted parameters
-                peak_theta = fit_result.params.center
-                peak_int = fit_result.params.amplitude
-                fwhm = fit_result.params.fwhm
-                eta = fit_result.params.eta
-                fit_r_squared = fit_result.r_squared
-                
-                # Calculate integrated area from the fit
-                fitted_curve = PseudoVoigt.profile(
-                    theta_range, peak_theta, peak_int, fwhm, eta
-                )
-                try:
-                    area = np.trapezoid(fitted_curve, theta_range)
-                except AttributeError:
-                    area = np.trapz(fitted_curve, theta_range)
-            else:
-                # Fallback to simple method if fitting fails
-                use_pv_fitting = False
-                
-        except Exception:
-            # Fallback to simple method
-            use_pv_fitting = False
+        success, peak_theta, peak_int, fwhm, eta, area = _fit_peak_pseudo_voigt(
+            theta_range, int_range, peak_theta, peak_int, initial_fwhm
+        )
+        if success:
+            return PeakData(hkl=(0, 0, 0), two_theta=peak_theta, intensity=peak_int, fwhm=fwhm, area=area)
     
-    if not use_pv_fitting:
-        # =====================================================================
-        # Simple Half-Maximum Method (Fallback)
-        # =====================================================================
-        half_max = peak_int / 2
-        
-        left_idx = idx_max
-        while left_idx > 0 and int_range[left_idx] > half_max:
-            left_idx -= 1
-        right_idx = idx_max
-        while right_idx < len(int_range) - 1 and int_range[right_idx] > half_max:
-            right_idx += 1
-        
-        fwhm = theta_range[right_idx] - theta_range[left_idx]
-        fwhm = max(fwhm, 0.05)  # Minimum FWHM (instrument limit)
-        
-        try:
-            area = np.trapezoid(int_range, theta_range)
-        except AttributeError:
-            area = np.trapz(int_range, theta_range)
+    # Fallback to simple method
+    fwhm = max(initial_fwhm, 0.05)
+    area = _calculate_peak_area_simple(theta_range, int_range)
     
-    return PeakData(
-        hkl=(0, 0, 0),  # Will be assigned later
-        two_theta=peak_theta,
-        intensity=peak_int,
-        fwhm=fwhm,
-        area=area
-    )
+    return PeakData(hkl=(0, 0, 0), two_theta=peak_theta, intensity=peak_int, fwhm=fwhm, area=area)
 
 
 # =============================================================================
@@ -390,102 +394,49 @@ class AXCSASPipeline:
         Returns:
             PipelineResult with all analysis data
         """
-        # Parse filename
+        # Parse filename and initialize result
         file_info = parse_filename(filepath)
-        
-        # 修正：檔名中的時間代表「樣品存放時間」而非「電鍍時間」
-        # Fix: filename time represents "sample age" (self-annealing time), not "plating time"
-        # 若使用者未提供 sample_age_hours，則使用檔名解析的時間
-        parsed_time = file_info['time_hours']
-        effective_sample_age = sample_age_hours if sample_age_hours is not None else parsed_time
+        effective_sample_age = sample_age_hours if sample_age_hours is not None else file_info['time_hours']
         
         result = PipelineResult(
             filepath=filepath,
             sample_name=file_info['name'],
             leveler_concentration=file_info['concentration_ml'],
-            plating_time_hours=None,  # 電鍍時間需另外提供
-            sample_age_hours=effective_sample_age,  # 使用有效的樣品存放時間
+            plating_time_hours=None,
+            sample_age_hours=effective_sample_age,
         )
         
-        # 1. Load data
-        try:
-            two_theta, intensity = load_bruker_txt(filepath)
-        except Exception as e:
-            result.report = f"Error loading file: {e}"
+        # Step 1: Load data
+        two_theta, intensity, error = self._load_and_validate_data(filepath)
+        if error:
+            result.report = error
             return result
         
-        if len(two_theta) == 0:
-            result.report = "No data found in file"
-            return result
-        
-        # 2. Find peaks
-        for hkl, expected_pos in self.config.peak_positions.items():
-            peak = find_peak_in_range(
-                two_theta, intensity, expected_pos, self.config.peak_window
-            )
-            if peak:
-                peak.hkl = hkl
-                result.peaks.append(peak)
-        
+        # Step 2: Find peaks
+        result.peaks = self._find_peaks_from_data(two_theta, intensity)
         if len(result.peaks) < 2:
             result.report = f"Only {len(result.peaks)} peaks found"
             return result
         
-        # 3. Phase 04: Scherrer analysis
-        for peak in result.peaks:
-            scherrer_result = self.scherrer.calculate(
-                two_theta=peak.two_theta,
-                fwhm_observed=peak.fwhm,
-                fwhm_instrumental=np.sqrt(self.config.caglioti_w),
-                hkl=peak.hkl
-            )
-            result.scherrer_results.append(scherrer_result)
+        # Step 3: Scherrer analysis
+        result.scherrer_results, result.average_size_nm = self._run_scherrer_analysis(result.peaks)
         
-        # Calculate average size
-        valid_sizes = [
-            r.size_nm for r in result.scherrer_results
-            if r.validity_flag != ValidityFlag.UNRELIABLE
-        ]
-        if valid_sizes:
-            result.average_size_nm = np.mean(valid_sizes)
-        
-        # 4. Phase 05: W-H analysis (if enough peaks)
+        # Step 4: W-H analysis (if enough peaks)
         if len(result.peaks) >= 3:
             two_theta_arr = np.array([p.two_theta for p in result.peaks])
             fwhm_arr = np.array([p.fwhm for p in result.peaks])
             hkl_list = [p.hkl for p in result.peaks]
-            
-            result.wh_result = self.wh.analyze(
-                two_theta_arr, fwhm_arr, hkl_list
-            )
+            result.wh_result = self.wh.analyze(two_theta_arr, fwhm_arr, hkl_list)
         
-        # 5. Phase 06: Texture analysis
+        # Step 5: Texture analysis
         intensities = {p.hkl: p.intensity for p in result.peaks}
         result.texture_result = self.texture.analyze(intensities)
         
-        # 6. Phase 07: Defect analysis
-        peak_111 = next((p for p in result.peaks if p.hkl == (1, 1, 1)), None)
-        peak_200 = next((p for p in result.peaks if p.hkl == (2, 0, 0)), None)
+        # Step 6: Defect analysis
+        result.stacking_fault, result.lattice_result = self._run_defect_analysis(result.peaks)
         
-        if peak_111 and peak_200:
-            result.stacking_fault = self.sf_analyzer.analyze(
-                peak_111.two_theta, peak_200.two_theta
-            )
-        
-        # Lattice from (311) or (220) preferably
-        high_angle_peak = next(
-            (p for p in result.peaks if p.hkl in [(3, 1, 1), (2, 2, 0)]),
-            result.peaks[-1] if result.peaks else None
-        )
-        if high_angle_peak:
-            result.lattice_result = self.lattice.analyze_lattice(
-                high_angle_peak.two_theta, high_angle_peak.hkl
-            )
-        
-        # Self-annealing state
+        # Step 7: Annealing state and comprehensive report
         result.annealing_state, _ = determine_annealing_state(sample_age_hours)
-        
-        # 7. Generate comprehensive result
         result.comprehensive = self._build_comprehensive(result)
         result.report = generate_comprehensive_report(result.comprehensive)
         

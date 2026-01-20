@@ -15,6 +15,32 @@ from typing import Optional, List
 from axcsas.__version__ import __version__
 
 
+# =============================================================================
+# LaB6 Standard Reference Material Peak Positions
+# NIST SRM 660c - Lanthanum Hexaboride
+# =============================================================================
+# Reference: NIST Standard Reference Material 660c
+#            Certificate of Analysis, National Institute of Standards and Technology
+#            a = 4.15689 Å (lattice parameter)
+#            Cu Kα₁ wavelength: λ = 1.540562 Å (Bearden 1967)
+#
+# Peak positions calculated using Bragg's Law for cubic LaB6
+# These values are used for instrument calibration (Caglioti parameters)
+# ═══════════════════════════════════════════════════════════════════════════
+LAB6_STANDARD_PEAKS = {
+    (1, 0, 0): 21.358,   # First reflection
+    (1, 1, 0): 30.385,   # Second reflection
+    (1, 1, 1): 37.442,   # Third reflection
+    (2, 0, 0): 43.505,   # Fourth reflection
+    (2, 1, 0): 48.958,   # Fifth reflection
+    (2, 1, 1): 53.993,   # Sixth reflection
+    (2, 2, 0): 63.218,   # Seventh reflection
+    (3, 0, 0): 67.548,   # Eighth reflection
+    (3, 1, 0): 71.704,   # Ninth reflection
+    (3, 1, 1): 75.724,   # Tenth reflection
+}
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """
     Main CLI entry point.
@@ -183,25 +209,13 @@ def _run_calibrate(args) -> int:
     print(f"  Loaded {len(two_theta)} data points")
     print(f"  2θ range: {two_theta.min():.1f}° - {two_theta.max():.1f}°")
     
-    # LaB6 standard peak positions (NIST SRM 660c)
-    LAB6_PEAKS = {
-        (1, 0, 0): 21.358,
-        (1, 1, 0): 30.385,
-        (1, 1, 1): 37.442,
-        (2, 0, 0): 43.505,
-        (2, 1, 0): 48.958,
-        (2, 1, 1): 53.993,
-        (2, 2, 0): 63.218,
-        (3, 0, 0): 67.548,
-        (3, 1, 0): 71.704,
-        (3, 1, 1): 75.724,
-    }
+    # Use module-level LAB6_STANDARD_PEAKS constant (defined at top of file)
     
     # Find peaks and measure FWHM
     peaks_data = []
     print("\nFitting standard peaks...")
     
-    for hkl, expected_pos in LAB6_PEAKS.items():
+    for hkl, expected_pos in LAB6_STANDARD_PEAKS.items():
         if two_theta.min() <= expected_pos <= two_theta.max():
             peak = find_peak_in_range(two_theta, intensity, expected_pos, window=2.0)
             if peak is not None and peak.fwhm > 0:
