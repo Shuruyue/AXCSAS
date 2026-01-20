@@ -15,6 +15,7 @@ from .style import (
     apply_axcsas_style,
     save_figure,
 )
+from axcsas.core.constants import CU_KA1, SCHERRER_K
 
 
 def plot_williamson_hall(
@@ -23,7 +24,7 @@ def plot_williamson_hall(
     fit_result: Optional[Dict[str, Any]] = None,
     hkl_labels: Optional[List[str]] = None,
     output_path: Optional[str] = None,
-    dpi: int = 1000,
+    dpi: int = 2400,  # Ultra-high quality (期刊出版標準)
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (10, 7),
@@ -109,8 +110,9 @@ def plot_williamson_hall(
                    alpha=0.1, color=COLORBLIND_SAFE[1])
 
     # Calculate physical quantities
-    wavelength = 1.54056  # Cu Kα1 in Å
-    K = 0.9
+    # Calculate physical quantities
+    wavelength = CU_KA1  # Cu Kα1
+    K = SCHERRER_K.default
 
     if intercept > 0:
         size_angstrom = K * wavelength / intercept
@@ -144,9 +146,10 @@ def plot_williamson_hall(
            bbox=props, family='monospace')
 
     # Quality indicator
-    if r_squared > 0.95:
-        quality = 'EXCELLENT'
-        quality_color = 'green'
+    quality_threshold = 0.95
+    if r_squared > quality_threshold:
+        quality = "Excellent"
+        box_facecolor = 'lightgreen'
     elif r_squared > 0.85:
         quality = 'ACCEPTABLE'
         quality_color = 'orange'
@@ -175,7 +178,7 @@ def plot_wh_residuals(
     fit_result: Optional[Dict[str, Any]] = None,
     hkl_labels: Optional[List[str]] = None,
     output_path: Optional[str] = None,
-    dpi: int = 1000,
+    dpi: int = 2400,  # Ultra-high quality (期刊出版標準)
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (10, 5),

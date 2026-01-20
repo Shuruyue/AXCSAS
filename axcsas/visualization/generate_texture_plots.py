@@ -27,34 +27,23 @@ import re
 
 
 # Peak positions for Cu (111), (200), (220)
-PEAK_POSITIONS = {
-    (1, 1, 1): 43.32,
-    (2, 0, 0): 50.45,
-    (2, 2, 0): 74.13,
-}
+# Use unified functions from core and analysis
+from axcsas.core.copper_crystal import get_standard_peaks
+from axcsas.analysis.pipeline import parse_filename
+
+# Peak positions for Cu (111), (200), (220) - from unified source
+PEAK_POSITIONS = get_standard_peaks()
+
+# Quality threshold for texture analysis
+# R² threshold for high-quality texture coefficient calculation
+# 織構係數計算的高品質 R² 閾值
+R2_THRESHOLD = 0.995  # User-defined quality standard / 使用者自定義品質標準
 
 
-def parse_sample_info(filename: str) -> dict:
-    """Extract concentration and time from filename."""
-    pattern = r'(\d+)_(\d+(?:\.\d+)?)ml_(\d+)h'
-    match = re.search(pattern, filename)
-    
-    if match:
-        return {
-            'concentration': float(match.group(2)),
-            'time': int(match.group(3)),
-        }
-    
-    # Handle initial samples (0h with minutes)
-    pattern2 = r'(\d+)_(\d+(?:\.\d+)?)ml_0h_(\d+)min'
-    match2 = re.search(pattern2, filename)
-    if match2:
-        return {
-            'concentration': float(match2.group(2)),
-            'time': 0,
-        }
-    
-    return {'concentration': 0, 'time': 0}
+# parse_sample_info removed - use parse_filename() from pipeline
+# parse_filename returns {'concentration_ml': float, 'time_hours': float, 'name': str}
+# Usage: info = parse_filename(filename); info['concentration_ml'], info['time_hours']
+
 
 
 def fit_peaks_and_get_intensities(two_theta: np.ndarray, intensity: np.ndarray, verbose: bool = False) -> tuple:
@@ -67,8 +56,11 @@ def fit_peaks_and_get_intensities(two_theta: np.ndarray, intensity: np.ndarray, 
         - r2_values: Dict of (hkl) -> R² value
         - area_values: Dict of (hkl) -> fitted area (all peaks)
     """
-    PV_FACTOR = 1.0645  # Pseudo-Voigt area factor
-    R2_THRESHOLD = 0.98  # Precision requirement for evolution plots
+    # Pseudo-Voigt area factor: (pi/2) / (2*sqrt(ln(2))) ??
+    # Actually, integrated area = Amplitude * FWHM * (eta * (pi/2) + (1-eta) * sqrt(pi/4ln2))
+    # But usually simplified. Using consistent factor if possible.
+    # For now, keeping local constant but documenting calculation.
+    PV_FACTOR = 1.0645  
     
     intensities = {}
     r2_values = {}
@@ -175,8 +167,9 @@ def plot_texture_diagnosis(
                              color='green', linewidth=1.5, label=f'FWHM={fwhm:.4f}°')
                     
                     # Info text box (matching fitting_diagnosis format)
-                    low_quality = r2 < 0.995
-                    quality_warning = "⚠️ R² < 0.995\n" if low_quality else ""
+                    target_r2 = 0.995
+                    low_quality = r2 < target_r2
+                    quality_warning = f"⚠️ R² < {target_r2}\n" if low_quality else ""
                     info_text = (
                         f"{quality_warning}"
                         f"R² = {r2:.4f}\n"
@@ -207,7 +200,9 @@ def plot_texture_diagnosis(
                  fontsize=14, fontweight='bold')
     plt.tight_layout()
     
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    # Use save_figure for consistent DPI (2400)
+    from axcsas.visualization.style import save_figure
+    save_figure(plt.gcf(), output_path)  # Uses default DPI=2400
     plt.close(fig)
 
 
@@ -249,7 +244,13 @@ def main():
         
         try:
             two_theta, intensity = load_bruker_txt(str(filepath))
-            sample_info = parse_sample_info(filename)
+            sample_info = parse_filename(str(filepath))
+            # Map keys: parse_filename uses 'concentration_ml' and 'time_hours'
+            # Convert to match existing usage
+            sample_info = {
+                'concentration': sample_info.get('concentration_ml', 0),
+                'time': sample_info.get('time_hours', 0),
+            }
             
             # Generate texture diagnosis plot
             sample_basename = filename.replace('.txt', '')
@@ -344,7 +345,7 @@ def main():
             x_param='time',
             output_path=str(output_dir / "tc_evolution_by_time.png"),
             show=False,
-            dpi=1000,
+            dpi=2400,  # Ultra-high quality (期刊出版標準)
         )
         plt.close(fig)
         print("  ✓ tc_evolution_by_time.png")
@@ -358,7 +359,7 @@ def main():
             x_param='concentration',
             output_path=str(output_dir / "tc_evolution_by_concentration.png"),
             show=False,
-            dpi=1000,
+            dpi=2400,  # Ultra-high quality (期刊出版標準)
         )
         plt.close(fig)
         print("  ✓ tc_evolution_by_concentration.png")
@@ -385,7 +386,7 @@ def main():
                     output_path=str(output_dir / f"tc_polar_{sample_name}.png"),
                     show=False,
                     sample_name=sample_name,
-                    dpi=1000,
+                    dpi=2400,  # Ultra-high quality (期刊出版標準)
                 )
                 plt.close(fig)
                 print(f"  ✓ tc_polar_{sample_name}.png")

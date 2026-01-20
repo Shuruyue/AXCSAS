@@ -3,13 +3,13 @@
 Fitting Method Comparison Script
 =================================
 
-Compare three fitting methods using the SAME shared fitting_api:
+Compare three fitting methods:
 1. Simple Pseudo-Voigt (ignores Kα₂ splitting)
 2. Kα Doublet fitting (shows both peaks)
-3. Enhanced Pseudo-Voigt (primary method, same as fitting_diagnosis)
+3. Rigorous Pseudo-Voigt (primary method, same as fitting_diagnosis)
 
-Uses axcsas.visualization.fitting_api for data consistency.
-確保與 fitting_diagnosis 使用相同的擬合計算。
+Ensures consistency with the main analysis pipeline.
+確保與主分析管道的一致性。
 """
 
 import numpy as np
@@ -25,13 +25,14 @@ from axcsas.fitting.ka_doublet import DoubletFitter
 # (fitting_api.py was removed; it caused R² regression)
 from axcsas.visualization.generate_fitting_diagnosis import fit_peak_with_diagnosis
 
-# Cu peak positions
-PEAKS = {
-    (1, 1, 1): 43.3,
-    (2, 0, 0): 50.4,
-    (2, 2, 0): 74.1,
-}
-PEAK_LABELS = ['(111)', '(200)', '(220)']
+# Cu peak positions - use unified function
+from axcsas.core.copper_crystal import get_standard_peaks
+
+# Peak configuration
+PEAKS = get_standard_peaks()  # Returns (111), (200), (220)
+PEAK_LABELS = [
+    f"({h[0]}{h[1]}{h[2]})" for h in PEAKS.keys()
+]
 
 
 def compare_methods_for_sample(filepath: Path, output_dir: Path):
@@ -60,7 +61,7 @@ def compare_methods_for_sample(filepath: Path, output_dir: Path):
     results = []
     
     for row, ((hkl, expected_pos), label) in enumerate(zip(PEAKS.items(), PEAK_LABELS)):
-        window = 2.5
+        window = 2.5  # Consistent with pipeline default
         mask = (two_theta >= expected_pos - window) & (two_theta <= expected_pos + window)
         theta_region = two_theta[mask]
         int_region = intensity[mask]
@@ -114,7 +115,7 @@ def compare_methods_for_sample(filepath: Path, output_dir: Path):
         ax2.legend(fontsize=7)
         ax2.grid(True, alpha=0.3)
         
-        # ==== Method 3: Enhanced Pseudo-Voigt (SAME AS FITTING DIAGNOSIS) ====
+        # ==== Method 3: Rigorous Pseudo-Voigt (SAME AS FITTING DIAGNOSIS) ====
         ax3 = axes[row, 2]
         
         # CALL THE EXACT FUNCTION FROM generate_fitting_diagnosis.py
@@ -150,7 +151,7 @@ def compare_methods_for_sample(filepath: Path, output_dir: Path):
     
     plt.tight_layout()
     output_path = output_dir / f'{sample_name}_method_comparison.png'
-    plt.savefig(output_path, bbox_inches='tight', dpi=150)
+    plt.savefig(output_path, bbox_inches='tight', dpi=2400)  # Ultra-high quality
     plt.close()
     
     return results
@@ -161,11 +162,14 @@ def main():
     print("Fitting Method Comparison (using shared fitting_api)")
     print("1. Simple Pseudo-Voigt (ignores Kα₂)")
     print("2. Kα Doublet (Kα₁ + Kα₂ separate peaks)")
-    print("3. Enhanced PV (SAME as fitting_diagnosis)")
+    print("3. Rigorous PV (SAME as fitting_diagnosis)")
     print("=" * 60)
     
     project_root = Path(__file__).parent.parent.parent
-    data_dir = project_root / "data" / "raw" / "202511"
+    data_dir = project_root / "data" / "raw" / "202511" # Update this path as needed
+    if not data_dir.exists():
+        data_dir = project_root / "data" / "raw"
+    
     output_dir = project_root / "outputs" / "plots" / "ka_comparison"
     output_dir.mkdir(parents=True, exist_ok=True)
     

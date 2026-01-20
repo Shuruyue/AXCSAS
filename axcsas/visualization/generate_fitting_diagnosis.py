@@ -46,13 +46,11 @@ import matplotlib.pyplot as plt
 apply_axcsas_style()
 
 
-# Cu peak positions (JCPDS)
-PEAK_POSITIONS = {
-    (1, 1, 1): 43.3,
-    (2, 0, 0): 50.4,
-    (2, 2, 0): 74.1,
-}
-PEAK_LABELS = ['(111)', '(200)', '(220)']
+# Cu peak positions (JCPDS) - use unified function
+from axcsas.core.copper_crystal import get_standard_peaks
+
+PEAK_POSITIONS = get_standard_peaks()  # Returns (111), (200), (220)
+PEAK_LABELS = [f"({h[0]}{h[1]}{h[2]})" for h in PEAK_POSITIONS.keys()]
 
 
 def fit_peak_with_diagnosis(
@@ -145,7 +143,7 @@ def fit_peak_with_diagnosis(
                 use_doublet = False
         
         if not use_doublet or not result['success']:
-            # Enhanced Pseudo-Voigt fitting with polynomial background
+            # Rigorous Pseudo-Voigt fitting with polynomial background
             from scipy.optimize import least_squares
             
             # Estimate polynomial background (quadratic)
@@ -233,8 +231,9 @@ def fit_peak_with_diagnosis(
                 result['dof'] = best_dof
                 result['method'] = 'enhanced-pv'
                 result['fitted_curve'] = best_fitted
-                # Flag low quality fits (R² < 0.995)
-                result['low_quality'] = best_r2 < 0.995
+                # Flag low quality fits
+                quality_target = 0.995
+                result['low_quality'] = best_r2 < quality_target
     except Exception as e:
         result['error'] = str(e)
     
@@ -383,7 +382,7 @@ def generate_sample_fitting_plot(
     
     # Save plot using visualization module
     output_path = output_dir / f'{sample_name}_fitting.png'
-    save_figure(fig, str(output_path), dpi=1000)
+    save_figure(fig, str(output_path), dpi=2400)  # Uses default ultra-high quality
     plt.close()
     
     return peaks_info

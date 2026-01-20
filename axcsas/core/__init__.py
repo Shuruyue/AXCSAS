@@ -9,15 +9,17 @@ Core domain logic including constants, configuration, and crystal data.
 from axcsas.core.constants import (
     CU_KA1,
     CU_KA2,
+    CU_KA_AVG,
+    KA2_KA1_RATIO,
     SCHERRER_K,
     MIN_RELIABLE_SIZE,
     MAX_RELIABLE_SIZE,
     MIN_BROADENING_RATIO,
-    CU_JCPDS,
 )
 
 from axcsas.core.copper_crystal import (
     get_k_for_hkl,
+    get_standard_peaks,
     SCHERRER_CUBIC_K,
     CU_ELASTIC,
 )
@@ -32,16 +34,22 @@ from axcsas.core.units import (
 )
 
 __all__ = [
-    # Constants
+    # Constants - X-ray wavelengths
     "CU_KA1",
     "CU_KA2",
+    "CU_KA_AVG",
+    "KA2_KA1_RATIO",
+    # Constants - Scherrer
     "SCHERRER_K",
+    # Constants - Limits
     "MIN_RELIABLE_SIZE",
     "MAX_RELIABLE_SIZE",
     "MIN_BROADENING_RATIO",
-    "CU_JCPDS",
+    # Constants - JCPDS
+    # CU_JCPDS removed (Use copper_crystal.CU_JCPDS_EXTENDED)
     # Copper crystal
     "get_k_for_hkl",
+    "get_standard_peaks",
     "SCHERRER_CUBIC_K",
     "CU_ELASTIC",
     # Config

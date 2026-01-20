@@ -48,26 +48,7 @@ class SampleData:
     result: Optional[PipelineResult] = None
 
 
-def parse_sample_info(filename: str) -> Tuple[float, float]:
-    """
-    Parse leveler concentration and plating time from filename.
-    
-    Format: YYYYMMDD_Xml_Xh.txt or YYYYMMDD_Xml_Xh_Xmin.txt
-    """
-    # Extract concentration (e.g., "4.5ml" -> 4.5)
-    conc_match = re.search(r'_(\d+\.?\d*)ml_', filename)
-    concentration = float(conc_match.group(1)) if conc_match else 0.0
-    
-    # Extract time in hours
-    hours_match = re.search(r'_(\d+)h', filename)
-    hours = float(hours_match.group(1)) if hours_match else 0.0
-    
-    # Check for minutes
-    min_match = re.search(r'_(\d+)min', filename)
-    if min_match:
-        hours += float(min_match.group(1)) / 60.0
-    
-    return concentration, hours
+# parse_sample_info removed - use parse_filename from pipeline
 
 
 def analyze_all_samples(data_dir: Path) -> List[SampleData]:
@@ -80,7 +61,9 @@ def analyze_all_samples(data_dir: Path) -> List[SampleData]:
     
     for filepath in txt_files:
         try:
-            concentration, time_hours = parse_sample_info(filepath.name)
+            file_info = parse_filename(str(filepath))
+            concentration = file_info.get('concentration_ml', 0.0)
+            time_hours = file_info.get('time_hours', 0.0)
             
             # Run AXCSAS analysis
             result = pipeline.analyze(str(filepath))
@@ -100,10 +83,12 @@ def analyze_all_samples(data_dir: Path) -> List[SampleData]:
     
     return samples
 
+# Import fitting function from diagnosis for consistency
+from axcsas.core.copper_crystal import get_standard_peaks
+from axcsas.visualization.generate_fitting_diagnosis import fit_peak_with_diagnosis
 
-# Import fitting function and constants from diagnosis script for consistency
-from axcsas.visualization.generate_fitting_diagnosis import fit_peak_with_diagnosis, PEAK_POSITIONS
-from axcsas.analysis.pipeline import load_bruker_txt
+# Get standard peaks
+PEAK_POSITIONS = get_standard_peaks()
 
 def convert_samples_to_plot_data(samples: List[SampleData]) -> List[Dict]:
     """
@@ -127,7 +112,7 @@ def convert_samples_to_plot_data(samples: List[SampleData]) -> List[Dict]:
         peaks_data = []
         
         # Use valid peaks from the pipeline to know which HKLs are present, 
-        # but re-fit them using the "Enhanced" method from generate_fitting_diagnosis
+        # then fit them using the rigorous method from generate_fitting_diagnosis
         # Actually, let's stick to the standard set of peaks defined in PEAK_POSITIONS
         # to match the diagnosis plots exactly.
         
@@ -247,7 +232,8 @@ def generate_fwhm_plots(samples: List[SampleData], output_dir: Path) -> int:
             x_param='time',
             output_path=str(output_dir / 'fwhm_evolution_by_time.png'),
             show=False,
-            instrument_limit=0.05
+            instrument_limit=0.05  # degrees, user-defined or from Caglioti fit
+                                    # 使用者自定義或從 Caglioti 擬合計算
         )
         count += 1
         print(f"  ✓ fwhm_evolution_by_time.png")
@@ -260,7 +246,7 @@ def generate_fwhm_plots(samples: List[SampleData], output_dir: Path) -> int:
             plot_data,
             output_path=str(output_dir / 'fwhm_by_concentration.png'),
             show=False,
-            instrument_limit=0.05
+            instrument_limit=0.05  # degrees, user-defined or from Caglioti fit
         )
         count += 1
         print(f"  ✓ fwhm_by_concentration.png")
