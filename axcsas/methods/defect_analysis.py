@@ -1,10 +1,13 @@
 """
-Defect and Stress Analysis Module
-=================================
+Defect and Stress Analysis Module 缺陷與應力分析模組
+====================================================
 
 Stacking fault detection, lattice constant monitoring, and residual stress analysis.
+堆疊層錯檢測、晶格常數監控、殘留應力分析。
 
-Reference: 計劃書/07_微結構分析_下篇_缺陷與應力.md
+References 出處:
+- Warren (1969), X-ray Diffraction, Chapter 13 (stacking faults)
+- Simmons & Wang (1971), Single Crystal Elastic Constants (Poisson ratio)
 """
 
 import numpy as np
@@ -12,33 +15,86 @@ from dataclasses import dataclass, field
 from typing import Optional, Tuple, List, Dict
 from enum import Enum
 
+from axcsas.core.constants import CU_KA1
+from axcsas.core.copper_crystal import (
+    CU_JCPDS_EXTENDED, 
+    CU_CRYSTAL,
+    get_poisson_ratio,
+    CU_POISSON
+)
+
 
 # =============================================================================
-# Constants (文件 07 §10)
+# Constants 常數
 # =============================================================================
 
-# Standard peak separation (111)-(200)
-STANDARD_PEAK_SEPARATION = 7.136  # degrees
+# Standard peak separation (111)-(200) / 標準峰間距 (111)-(200)
+# Calculated dynamically from JCPDS data to match updated high-precision values
+STANDARD_PEAK_SEPARATION = (
+    CU_JCPDS_EXTENDED[(2, 0, 0)]["two_theta"] - 
+    CU_JCPDS_EXTENDED[(1, 1, 1)]["two_theta"]
+)
 
 # Warren geometric coefficient for FCC (111)-(200) stacking fault
-# α = (Δ2θ_exp - Δ2θ_std) / G
-# Based on design document (Doc 07 §3.3): 0.136° deviation → α ≈ 0.68%
-# Empirical relation: every 0.2° deviation corresponds to α = 1%
-# Therefore: α = deviation / G → 0.01 = -0.2 / G → G = -20
-WARREN_G_COEFFICIENT = -20.0
+# Warren FCC (111)-(200) 堆疊層錯幾何係數
+#
+# 文獻出處 Reference:
+#     Warren, B. E. (1969).
+#     "X-ray Diffraction."
+#     Dover Publications, New York.
+#     Chapter 13: Stacking Faults, Pages 275-298.
+#     ISBN: 978-0486663173 (重印版)
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# 理論推導 Theoretical Derivation
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Warren 推導的 FCC (200)-(111) 峰間距變化公式：
+# Warren's formula for FCC (200)-(111) peak separation shift:
+#
+#     Δ(2θ_200 - 2θ_111) = -(45√3 / π²) × α
+#
+# 其中 α 為堆疊層錯機率 (stacking fault probability)
+#
+# 係數計算 Coefficient calculation:
+#     G = -45√3 / π²
+#       = -45 × 1.7320508... / 9.8696044...
+#       = -77.9422... / 9.8696...
+#       = -7.897 (degrees per unit probability)
+#
+# 單位轉換 Unit conversion:
+#   若 α 以百分比表示 (α_percent = α × 100):
+#   G_percent = G / 100 = -0.07897 °/%
+#
+# 物理意義 Physical meaning:
+#   - 負號表示堆疊層錯使峰間距縮小
+#   - Negative sign indicates stacking faults reduce peak separation
+#   - (111) 峰向高角度偏移，(200) 峰向低角度偏移
+#   - (111) peak shifts to higher angles, (200) shifts to lower angles
+#
+# ═══════════════════════════════════════════════════════════════════════════
+import math
+_WARREN_G_THEORETICAL = -45 * math.sqrt(3) / (math.pi ** 2)  # = -7.897
 
-# Standard lattice constant for Cu
-STANDARD_LATTICE_CONSTANT = 3.6150  # Å
+WARREN_G_COEFFICIENT = _WARREN_G_THEORETICAL  # 理論推導值 / Theoretical value
 
-# Lattice constant thresholds
+# Standard lattice constant for Cu / 銅標準晶格常數
+# Reference: JCPDS 04-0836
+# Standard lattice constant / 標準晶格常數
+STANDARD_LATTICE_CONSTANT = CU_CRYSTAL.lattice_constant  # 3.6150 Å
+
+# Lattice constant thresholds / 晶格常數閾值
 LATTICE_MINOR_THRESHOLD = 3.616  # Å
 LATTICE_SEVERE_THRESHOLD = 3.618  # Å
 
-# Wavelength
-WAVELENGTH_CU_KA1 = 1.54056  # Å
+# 波長常數直接從 core.constants 使用 CU_KA1
+# Wavelength constant: use CU_KA1 directly from core.constants
 
-# Poisson's ratio for Cu
-POISSON_RATIO_CU = 0.34
+# Poisson's ratio 泊松比
+# 現在使用方向相依值，從 copper_crystal.get_poisson_ratio() 取得
+# Now using direction-dependent values from copper_crystal.get_poisson_ratio()
+# 多晶平均值 (legacy) / Polycrystalline average (legacy)
+POISSON_RATIO_CU = CU_POISSON.nu_poly  # 0.343
 
 
 # =============================================================================
@@ -157,8 +213,9 @@ class DefectAnalysisResult:
 class StackingFaultAnalyzer:
     """
     Warren-based stacking fault analyzer.
+    基於Warren分析的堆疊層錯分析器。
     
-    Reference: 文件 07 §2-3
+    Reference: Warren (1969), X-ray Diffraction, Ch.13
     
     For FCC metals with intrinsic stacking faults:
     - (111) peak shifts to higher angles
@@ -201,7 +258,7 @@ class StackingFaultAnalyzer:
         # Q.1.4: Calculate deviation from standard
         deviation = peak_separation - STANDARD_PEAK_SEPARATION
         
-        # Q.2.1-2.2: Warren formula for α (文件 07 §3.1)
+        # Warren formula for α / Warren 公式計算 α
         # α = deviation / G
         # G is negative, deviation is negative when SF present
         # So α comes out positive
@@ -210,7 +267,7 @@ class StackingFaultAnalyzer:
         
         alpha_percent = alpha * 100
         
-        # Determine severity (文件 07 §4.1)
+        # Determine severity / 判定嚴重程度
         if alpha_percent < 0.5:
             severity = StackingFaultSeverity.NORMAL
         elif alpha_percent < 1.0:
@@ -220,7 +277,7 @@ class StackingFaultAnalyzer:
         else:
             severity = StackingFaultSeverity.SEVERE
         
-        # Q.2.3: SPS warning (文件 07 §4.2)
+        # SPS warning check / SPS 警告檢查
         sps_warning = peak_separation < 7.0
         
         # Generate message
@@ -251,7 +308,7 @@ class StackingFaultAnalyzer:
 
 def calculate_d_spacing(
     two_theta: float,
-    wavelength: float = WAVELENGTH_CU_KA1
+    wavelength: float = CU_KA1
 ) -> float:
     """
     Calculate d-spacing from Bragg's law.
@@ -265,14 +322,13 @@ def calculate_d_spacing(
 def calculate_lattice_constant(
     two_theta: float,
     hkl: Tuple[int, int, int],
-    wavelength: float = WAVELENGTH_CU_KA1
+    wavelength: float = CU_KA1
 ) -> float:
     """
     Calculate lattice constant from peak position.
+    從峰位計算晶格常數。
     
     a = d × √(h² + k² + l²)
-    
-    Reference: 文件 07 §5.3
     """
     d = calculate_d_spacing(two_theta, wavelength)
     h, k, l = hkl
@@ -282,26 +338,23 @@ def calculate_lattice_constant(
 class LatticeMonitor:
     """
     Lattice constant and residual stress monitor.
-    
-    Reference: 文件 07 §5
+    晶格常數與殘留應力監控器。
     
     Prefers high-angle peaks (311, 220) for better accuracy.
+    偶好高角峰 (311, 220) 以提高精度。
     """
     
     def __init__(
         self,
         standard_a: float = STANDARD_LATTICE_CONSTANT,
-        wavelength: float = WAVELENGTH_CU_KA1
+        wavelength: float = CU_KA1
     ):
         self.standard_a = standard_a
         self.wavelength = wavelength
         
-        # Standard d-spacings for Cu
+        # Dynamic lookup from SSOT
         self.standard_d = {
-            (1, 1, 1): 2.0871,
-            (2, 0, 0): 1.8075,
-            (2, 2, 0): 1.2780,
-            (3, 1, 1): 1.0902,
+            hkl: data["d_spacing"] for hkl, data in CU_JCPDS_EXTENDED.items()
         }
     
     def analyze_lattice(
@@ -355,10 +408,9 @@ class LatticeMonitor:
     ) -> ResidualStressResult:
         """
         Estimate residual stress from peak shift.
+        從峰位偏移估算殘留應力。
         
         σ = E / (1+ν) × (d - d₀) / d₀
-        
-        Reference: 文件 07 §7.2
         """
         d_measured = calculate_d_spacing(two_theta, self.wavelength)
         d_standard = self.standard_d.get(hkl, d_measured)
@@ -368,7 +420,9 @@ class LatticeMonitor:
         # Convert GPa to MPa
         E_mpa = youngs_modulus_gpa * 1000
         
-        stress_mpa = E_mpa / (1 + POISSON_RATIO_CU) * delta_d_ratio
+        # 使用方向相依泊松比 / Use direction-dependent Poisson ratio
+        poisson = get_poisson_ratio(*hkl, use_directional=True)
+        stress_mpa = E_mpa / (1 + poisson) * delta_d_ratio
         
         # Determine stress type
         if stress_mpa > 10:
@@ -402,8 +456,7 @@ def determine_annealing_state(
 ) -> Tuple[AnnealingState, str]:
     """
     Determine self-annealing state from sample age.
-    
-    Reference: 文件 07 §6.4
+    根據樣品存放時間判定自退火狀態。
     
     Args:
         sample_age_hours: Time since deposition (hours), None for unknown

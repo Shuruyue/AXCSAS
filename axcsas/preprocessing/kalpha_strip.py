@@ -1,39 +1,46 @@
 """
-Kα2 Stripping Module
+Kα2 Stripping Module Kα2 剥離模組
+==================================
 Implements Rachinger Correction for Cu Kα2 removal.
+實現用於移除 Cu Kα2 的 Rachinger 校正。
+
+Reference 出處:
+    Rachinger, W. A. (1948). J. Sci. Instr., 25(7), 254-255.
 """
 
 import numpy as np
 from typing import Tuple
 
+from axcsas.core.constants import CU_KA1, CU_KA2, KA2_KA1_RATIO
+
 
 class KalphaStripper:
     """
     Kα2 stripping using Rachinger Correction.
+    使用 Rachinger 校正的 Kα2 剥離。
     
-    For Cu target X-ray:
-    - Kα1: 1.54056 Å
-    - Kα2: 1.54439 Å
-    - Intensity ratio: I(Kα2) = 0.5 × I(Kα1)
+    For Cu Kα wavelengths (Bearden 1967, Rev. Mod. Phys. 39, 78):
+    - Kα1: 1.540562 Å
+    - Kα2: 1.544390 Å
+    - Intensity ratio: Kα2/Kα1 ≈ 0.5 (Burger-Dorgelo rule)
     """
-    
+
     def __init__(
-        self, 
-        wavelength_ka1: float = 1.54056,
-        wavelength_ka2: float = 1.54439,
-        ka2_ratio: float = 0.5
+        self,
+        ka1_lambda: float = CU_KA1,
+        ka2_lambda: float = CU_KA2,
+        ka_ratio: float = KA2_KA1_RATIO
     ):
         """
         Initialize Kα2 stripper.
         
         Args:
-            wavelength_ka1: Kα1 wavelength in Å (default: Cu Kα1)
             wavelength_ka2: Kα2 wavelength in Å (default: Cu Kα2)
             ka2_ratio: I(Kα2) / I(Kα1) ratio (default: 0.5)
         """
-        self.lambda_ka1 = wavelength_ka1
-        self.lambda_ka2 = wavelength_ka2
-        self.ratio = ka2_ratio
+        self.wavelength_ka1 = ka1_lambda
+        self.wavelength_ka2 = ka2_lambda
+        self.ka2_ratio = ka_ratio
     
     def strip(
         self, 
@@ -66,7 +73,7 @@ class KalphaStripper:
             sin_theta = np.sin(theta_rad)
             
             # Calculate the 2θ position for Kα2
-            sin_theta_ka2 = sin_theta * (self.lambda_ka2 / self.lambda_ka1)
+            sin_theta_ka2 = sin_theta * (self.wavelength_ka2 / self.wavelength_ka1)
             
             if sin_theta_ka2 > 1:
                 continue
@@ -80,7 +87,7 @@ class KalphaStripper:
             
             # Subtract Kα2 contribution
             if 0 <= i - idx_offset < len(corrected):
-                ka2_contribution = self.ratio * corrected[i - idx_offset]
+                ka2_contribution = self.ka2_ratio * corrected[i - idx_offset]
                 corrected[i] = max(0, corrected[i] - ka2_contribution)
         
         return corrected
@@ -95,14 +102,16 @@ class KalphaStripper:
         Returns:
             Angular shift in degrees
         """
-        theta_rad = np.radians(two_theta / 2)
-        sin_theta = np.sin(theta_rad)
-        sin_theta_ka2 = sin_theta * (self.lambda_ka2 / self.lambda_ka1)
+        # Calculate 2θ shift: Δ(2θ) = 2 * arcsin(λ2/λ1 * sin(θ1)) - 2θ1
+        theta_rad = np.radians(two_theta / 2.0)
+        sin_theta1 = np.sin(theta_rad)
         
-        if sin_theta_ka2 > 1:
+        # Check domain for arcsin
+        term = (self.wavelength_ka2 / self.wavelength_ka1) * sin_theta1       
+        if term > 1:
             return float('nan')
         
-        theta_ka2_rad = np.arcsin(sin_theta_ka2)
+        theta_ka2_rad = np.arcsin(term)
         return 2 * np.degrees(theta_ka2_rad) - two_theta
 
 

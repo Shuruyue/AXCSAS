@@ -1,6 +1,8 @@
 """
-Goodness of Fit Module
+Goodness of Fit Module 擬合優度模組
+====================================
 Implements quality metrics for XRD peak fitting.
+實現 XRD 峰擬合的品質指標。
 """
 
 import numpy as np

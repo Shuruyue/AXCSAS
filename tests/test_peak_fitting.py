@@ -218,12 +218,12 @@ class TestJCPDSData:
     """Tests for JCPDS reference data."""
     
     def test_jcpds_111_position(self):
-        """JCPDS (111) should be at 43.297°."""
-        assert abs(JCPDS_COPPER_PEAKS[(1, 1, 1)] - 43.297) < 0.001
+        """JCPDS (111) should be at 43.316° (High Precision)."""
+        assert abs(JCPDS_COPPER_PEAKS[(1, 1, 1)] - 43.316) < 0.001
     
     def test_jcpds_200_position(self):
-        """JCPDS (200) should be at 50.433°."""
-        assert abs(JCPDS_COPPER_PEAKS[(2, 0, 0)] - 50.433) < 0.001
+        """JCPDS (200) should be at 50.448° (High Precision)."""
+        assert abs(JCPDS_COPPER_PEAKS[(2, 0, 0)] - 50.448) < 0.001
     
     def test_all_peaks_present(self):
         """All main Cu peaks should be in JCPDS data."""

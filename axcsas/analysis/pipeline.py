@@ -1,14 +1,16 @@
 """
-AXCSAS Complete Analysis Pipeline
-=================================
+AXCSAS Complete Analysis Pipeline 完整分析管道
+==========================================
 
-Unified pipeline integrating all analysis phases:
-- Phase 02: Preprocessing
-- Phase 03: Peak Fitting
-- Phase 04: Scherrer Size Calculation
-- Phase 05: Williamson-Hall Strain Analysis
-- Phase 06: Texture Analysis
-- Phase 07: Defect and Stress Diagnosis
+Unified pipeline integrating all analysis phases.
+統一的分析流程，整合所有分析階段。
+
+- Phase 02: Preprocessing 預處理
+- Phase 03: Peak Fitting 峰値擬合
+- Phase 04: Scherrer Size Calculation 晶粒尺寸計算
+- Phase 05: Williamson-Hall Strain Analysis 應變分析
+- Phase 06: Texture Analysis 織構分析
+- Phase 07: Defect and Stress Diagnosis 缺陷與應力診斷
 """
 
 import numpy as np
@@ -17,19 +19,20 @@ from typing import Optional, Tuple, List, Dict, Any
 from pathlib import Path
 import re
 
+from axcsas.core.constants import CU_KA1
+from axcsas.core.copper_crystal import CU_JCPDS_EXTENDED
+
 from axcsas.methods.scherrer import (
-    ScherrerCalculatorEnhanced,
-    ScherrerResultEnhanced,
-    ValidityFlag,
+    ScherrerCalculator,
+    ScherrerResult,
 )
 from axcsas.methods.williamson_hall import (
-    WilliamsonHallEnhanced,
-    WHResultEnhanced,
-    WHQualityLevel,
+    WilliamsonHallAnalyzer,
+    WHResult,
 )
 from axcsas.methods.texture import (
-    TextureAnalyzerEnhanced,
-    TextureResultEnhanced,
+    TextureAnalyzer,
+    TextureAnalysisResult,
 )
 from axcsas.methods.defect_analysis import (
     StackingFaultAnalyzer,
@@ -55,33 +58,36 @@ from axcsas.fitting.pseudo_voigt import PseudoVoigt, PseudoVoigtParams
 
 @dataclass
 class AnalysisConfig:
-    """Configuration for AXCSAS analysis pipeline."""
+    """
+    Configuration for AXCSAS analysis pipeline.
+    AXCSAS 分析管道配置。
+    """
     
-    # X-ray parameters
-    wavelength: float = 1.54056  # Cu Kα1
+    # X-ray parameters / X-ray 參數
+    # Default: Cu Kα1 from constants (Bearden 1967)
+    wavelength: float = CU_KA1
     
-    # Scherrer parameters
+    # Scherrer parameters / Scherrer 參數
     use_cubic_habit: bool = True
     
-    # Peak detection
+    # Peak detection / 峰值偵測
     peak_window: float = 2.0  # degrees around expected position
     min_intensity: float = 100  # minimum counts
     
-    # Instrumental broadening (Caglioti U, V, W)
-    # Typical empirical values for lab diffractometers (Bruker D8, D2, etc.)
+    # Instrumental broadening (Caglioti U, V, W) / 儀器展寬
+    # Typical empirical values for lab diffractometers
     # FWHM_inst² = U·tan²θ + V·tanθ + W
-    # With W=0.003, FWHM_inst ≈ 0.055° (typical instrument resolution)
     caglioti_u: float = 0.0
     caglioti_v: float = 0.0
     caglioti_w: float = 0.003  # → FWHM_inst = √0.003 ≈ 0.055°
     
-    # JCPDS Cu peak positions
-    peak_positions: Dict[Tuple[int, int, int], float] = field(default_factory=lambda: {
-        (1, 1, 1): 43.3,
-        (2, 0, 0): 50.4,
-        (2, 2, 0): 74.1,
-        (3, 1, 1): 89.9,
-    })
+    # Cu peak positions from JCPDS 04-0836 / 銅峰位從 JCPDS 標準
+    # Dynamically generated from CU_JCPDS constants
+    EXPECTED_PEAKS: Dict[Tuple[int, int, int], float] = field(
+        default_factory=lambda: {
+            hkl: data["two_theta"] for hkl, data in CU_JCPDS_EXTENDED.items()
+        }
+    )
 
 
 # =============================================================================
@@ -115,14 +121,14 @@ class PipelineResult:
     peaks: List[PeakData] = field(default_factory=list)
     
     # Phase 04: Scherrer
-    scherrer_results: List[ScherrerResultEnhanced] = field(default_factory=list)
+    scherrer_results: List[ScherrerResult] = field(default_factory=list)
     average_size_nm: Optional[float] = None
     
     # Phase 05: W-H
-    wh_result: Optional[WHResultEnhanced] = None
+    wh_result: Optional[WHResult] = None
     
     # Phase 06: Texture
-    texture_result: Optional[TextureResultEnhanced] = None
+    texture_result: Optional[TextureAnalysisResult] = None
     
     # Phase 07: Defects
     stacking_fault: Optional[StackingFaultResult] = None
@@ -357,14 +363,15 @@ class AXCSASPipeline:
         self.config = config or AnalysisConfig()
         
         # Initialize analyzers
-        self.scherrer = ScherrerCalculatorEnhanced(
-            wavelength=self.config.wavelength,
-            use_cubic_habit=self.config.use_cubic_habit
-        )
-        self.wh = WilliamsonHallEnhanced(
-            wavelength=self.config.wavelength
-        )
-        self.texture = TextureAnalyzerEnhanced()
+        self.scherrer = ScherrerCalculator()
+        
+        # Initialize Williamson-Hall analyzer
+        # 初始化 Williamson-Hall 分析器
+        self.wh = WilliamsonHallAnalyzer()
+        
+        # Initialize Texture analyzer
+        # 初始化紋理分析器
+        self.texture = TextureAnalyzer()
         self.sf_analyzer = StackingFaultAnalyzer()
         self.lattice = LatticeMonitor()
     

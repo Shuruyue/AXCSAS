@@ -15,8 +15,8 @@ from pathlib import Path
 
 
 from axcsas.methods.texture import (
-    TextureAnalyzerEnhanced,
-    TextureResultEnhanced,
+    TextureAnalyzer,
+    TextureAnalysisResult,
     OrientationType,
     analyze_texture,
     generate_texture_report,

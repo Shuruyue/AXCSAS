@@ -1,14 +1,25 @@
 """
-Unit Conversion Module
+Unit Conversion Module 單位轉換模組
+===================================
 Provides unit conversion utilities for XRD analysis.
+提供 XRD 分析所需的單位轉換工具。
+
+Standard definitions 標準定義:
+- 1 Å (Ångström) = 10⁻¹⁰ m = 0.1 nm
+- 2θ = 2 × θ (Bragg angle)
+
+All functions are pure mathematical transformations with no physical constants.
+所有函數皆為純數學轉換，不含物理常數。
 """
 
 import numpy as np
 from typing import Union
 
+from axcsas.core.constants import CU_KA1
+
 
 # =============================================================================
-# Angle Conversions
+# Angle Conversions 角度轉換
 # =============================================================================
 
 def deg_to_rad(degrees: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
@@ -157,7 +168,7 @@ def fwhm_rad_to_deg(fwhm_rad: Union[float, np.ndarray]) -> Union[float, np.ndarr
 
 def d_spacing_to_two_theta(
     d_spacing: float,
-    wavelength: float = 1.54056
+    wavelength: float = CU_KA1  # Default: Cu Kα1 from constants
 ) -> float:
     """
     Calculate 2θ from d-spacing using Bragg's law.
@@ -188,7 +199,7 @@ def d_spacing_to_two_theta(
 
 def two_theta_to_d_spacing(
     two_theta: float,
-    wavelength: float = 1.54056
+    wavelength: float = CU_KA1  # Default: Cu Kα1 from constants
 ) -> float:
     """
     Calculate d-spacing from 2θ using Bragg's law.

@@ -1,11 +1,12 @@
 """
-Scherrer Crystallite Size Analysis
-==================================
+Scherrer Crystallite Size Analysis Scherrer 晶粒尺寸分析
+=======================================================
 
 Implements the Scherrer equation with dynamic K values, validity flags,
 and complete unit conversion safety.
+使用動態 K 值、有效性標誌和完整單位轉換安全性實現 Scherrer 方程。
 
-Reference:
+Reference 出處:
     Langford, J. I., & Wilson, A. J. C. (1978).
     Scherrer after sixty years. J. Appl. Cryst., 11, 102-113.
 """
@@ -30,7 +31,7 @@ from axcsas.fitting.hkl_assignment import assign_hkl
 # Constants
 # =============================================================================
 
-WAVELENGTH_CU_KA1 = CU_KA1  # Å
+# 波長常數直接使用 CU_KA1 / Wavelength: use CU_KA1 directly
 FWHM_RATIO_THRESHOLD = MIN_BROADENING_RATIO
 
 
@@ -90,7 +91,7 @@ class ScherrerResult:
     size_angstrom: float
     two_theta: float
     hkl: Optional[Tuple[int, int, int]] = None
-    k_factor: float = 0.89
+    k_factor: float = 0.829  # L&W 1978 spherical standard
     fwhm_observed: float = 0.0
     fwhm_instrumental: float = 0.0
     fwhm_sample: float = 0.0
@@ -125,7 +126,7 @@ class ScherrerCalculator:
         - Caglioti instrumental broadening integration
 
     Args:
-        wavelength: X-ray wavelength in Å (default: Cu Kα1 = 1.54056)
+        wavelength: X-ray wavelength in Å (default: Cu Kα1 = 1.540562, Bearden 1967)
         use_cubic_habit: Use ED-Cu specific K values (default: True)
         caglioti_params: (U, V, W) tuple for instrumental broadening
 
@@ -138,7 +139,7 @@ class ScherrerCalculator:
 
     def __init__(
         self,
-        wavelength: float = WAVELENGTH_CU_KA1,
+        wavelength: float = CU_KA1,
         use_cubic_habit: bool = True,
         caglioti_params: Optional[Tuple[float, float, float]] = None
     ) -> None:
@@ -329,8 +330,8 @@ class ScherrerCalculator:
 def calculate_crystallite_size(
     two_theta: float,
     fwhm: float,
-    wavelength: float = WAVELENGTH_CU_KA1,
-    k_factor: float = 0.89,
+    wavelength: float = CU_KA1,
+    k_factor: float = 0.829,  # L&W 1978 spherical standard
     fwhm_instrumental: float = 0.0
 ) -> float:
     """
@@ -341,7 +342,7 @@ def calculate_crystallite_size(
         two_theta: Peak position (degrees). 峰位（度）
         fwhm: FWHM in degrees. 半高寬（度）
         wavelength: X-ray wavelength (Å), default Cu Kα1. X 射線波長
-        k_factor: Scherrer constant, default 0.89. Scherrer 常數
+        k_factor: Scherrer constant, default 0.829 (L&W 1978). Scherrer 常數
         fwhm_instrumental: Instrumental FWHM (optional). 儀器寬化
 
     Returns:
@@ -409,12 +410,5 @@ def generate_scherrer_report(
     return "\n".join(lines)
 
 
-# =============================================================================
-# Backward Compatibility Aliases
-# =============================================================================
 
-# For backward compatibility with enhanced module
-ScherrerResultEnhanced = ScherrerResult
-ScherrerCalculatorEnhanced = ScherrerCalculator
-calculate_scherrer_enhanced = calculate_scherrer
 

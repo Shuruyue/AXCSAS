@@ -1,20 +1,15 @@
 """
-HKL Peak Assignment Module
-==========================
+HKL Peak Assignment Module 峰位指標指派模組
+==========================================
 
 Automatic assignment of XRD peaks to copper crystallographic indices.
-
-Reference: 計劃書/03_峰值擬合與參數提取.md §6.2
+XRD 峰自動指派到銅的結晶學指標。
 """
 
 import numpy as np
 from dataclasses import dataclass
 from typing import Optional, Tuple, List, Dict
-import sys
-from pathlib import Path
 
-# Import from core module
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from axcsas.core.copper_crystal import CU_JCPDS_EXTENDED, is_fcc_allowed
 
 
@@ -42,14 +37,10 @@ class PeakAssignment:
         return f"Unassigned @ {self.measured_two_theta:.3f}°"
 
 
-# JCPDS 04-0836 standard peak positions for Cu
-# Reference values at Cu Kα1 = 1.54056 Å
+# JCPDS 04-0836 standard peak positions for Cu / 銅的 JCPDS 標準峰位
+# Generated from CU_JCPDS constants / 從 CU_JCPDS 常數生成
 JCPDS_COPPER_PEAKS: Dict[Tuple[int, int, int], float] = {
-    (1, 1, 1): 43.297,
-    (2, 0, 0): 50.433,
-    (2, 2, 0): 74.130,
-    (3, 1, 1): 89.931,
-    (2, 2, 2): 95.139,
+    hkl: data["two_theta"] for hkl, data in CU_JCPDS_EXTENDED.items()
 }
 
 
@@ -59,11 +50,11 @@ def assign_hkl(
 ) -> Optional[Tuple[int, int, int]]:
     """
     Assign (hkl) Miller indices to a peak position.
-    
-    Reference: 文件 03 §6.2
+    將 (hkl) Miller 指標指派給峰位。
     
     The assignment uses JCPDS 04-0836 standard values with tolerance
     for residual stress shifts (|Δ2θ| < 0.5° is normal for ED-Cu).
+    使用 JCPDS 04-0836 標準值，容許殘留應力偏移 (|Δ2θ| < 0.5° 對 ED-Cu 正常)。
     
     Args:
         two_theta: Measured 2θ position in degrees
@@ -163,8 +154,7 @@ def assign_all_peaks(
 def get_expected_peak_range(hkl: Tuple[int, int, int]) -> Optional[Tuple[float, float]]:
     """
     Get expected 2θ range for a given hkl.
-    
-    Reference: 文件 03 §4.3
+    獲取給定 hkl 的預期 2θ 範圍。
     
     Args:
         hkl: Miller indices

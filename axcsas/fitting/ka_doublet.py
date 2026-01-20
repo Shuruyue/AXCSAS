@@ -1,16 +1,17 @@
 """
-Kα Doublet Handling Module
-=========================
+Kα Doublet Handling Module Kα 雙峰處理模組
+==========================================
 
-Two approaches for handling Cu Kα₁/Kα₂ doublet in XRD data:
+Two approaches for handling Cu Kα₁/Kα₂ doublet in XRD data.
+處理 XRD 數據中 Cu Kα₁/Kα₂ 雙峰的兩種方法。
 
-1. Ka2Stripper: Remove Kα₂ contribution from spectrum
-2. DoubletFitter: Fit both Kα₁ and Kα₂ peaks simultaneously
+1. Ka2Stripper: Remove Kα₂ contribution from spectrum / 從光譜中移除 Kα₂ 貢獨
+2. DoubletFitter: Fit both Kα₁ and Kα₂ peaks simultaneously / 同時擬合 Kα₁ 和 Kα₂ 峰
 
-Cu Kα wavelengths:
-- Kα₁ = 1.54056 Å (stronger, 2x intensity)
-- Kα₂ = 1.54439 Å (weaker, 1x intensity)
-- Kα₂/Kα₁ intensity ratio ≈ 0.5
+Cu Kα wavelengths 波長 (Bearden 1967, Rev. Mod. Phys. 39, 78):
+- Kα₁ = 1.540562 Å (stronger, 2x intensity / 較強)
+- Kα₂ = 1.544390 Å (weaker, 1x intensity / 較弱)
+- Kα₂/Kα₁ intensity ratio 強度比 ≈ 0.5 (Burger-Dorgelo rule)
 """
 
 import numpy as np
@@ -20,12 +21,10 @@ from typing import Tuple, Optional, Dict
 from dataclasses import dataclass
 
 from .pseudo_voigt import PseudoVoigt, PseudoVoigtParams, TrueVoigt
+from axcsas.core.constants import CU_KA1, CU_KA2, KA2_KA1_RATIO
 
 
-# Cu Kα wavelengths in Angstrom
-LAMBDA_KA1 = 1.54056
-LAMBDA_KA2 = 1.54439
-KA2_KA1_RATIO = 0.5  # Intensity ratio Kα₂/Kα₁
+# 波長常數直接使用 CU_KA1/CU_KA2 / Wavelength: use CU_KA1/CU_KA2 directly
 
 
 @dataclass
@@ -85,7 +84,7 @@ def calculate_ka2_position(two_theta_ka1: float) -> float:
     Returns:
         2θ position of Kα₂ peak (degrees)
     """
-    return theta2_from_wavelength_shift(two_theta_ka1, LAMBDA_KA1, LAMBDA_KA2)
+    return theta2_from_wavelength_shift(two_theta_ka1, CU_KA1, CU_KA2)
 
 
 class Ka2Stripper:
@@ -140,7 +139,7 @@ class Ka2Stripper:
             
             # Calculate where the corresponding Kα₁ would be
             # Kα₂ is at higher angle than Kα₁
-            theta_ka1 = theta2_from_wavelength_shift(theta_ka2, LAMBDA_KA2, LAMBDA_KA1)
+            theta_ka1 = theta2_from_wavelength_shift(theta_ka2, CU_KA2, CU_KA1)
             
             # Find the index of Kα₁ position
             idx_ka1 = np.searchsorted(two_theta, theta_ka1)

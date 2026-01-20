@@ -1,6 +1,8 @@
 """
-Levenberg-Marquardt Optimizer Module
+Levenberg-Marquardt Optimizer Module LM 優化器模組
+==================================================
 Implements non-linear least squares fitting for XRD peaks.
+實現 XRD 峰的非線性最小二乘法擬合。
 """
 
 import numpy as np
@@ -15,9 +17,10 @@ from .pseudo_voigt import PseudoVoigt, PseudoVoigtParams, TrueVoigt, VoigtParams
 class FitResult:
     """
     Result of peak fitting.
+    峰擬合結果。
     
     Enhanced with R_wp quality metric, integrated area, and hkl assignment.
-    Reference: 文件 03 §6-7
+    增強版：包含 R_wp 品質指標、積分面積和 hkl 指派。
     """
     params: PseudoVoigtParams
     covariance: Optional[np.ndarray]

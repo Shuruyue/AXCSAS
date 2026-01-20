@@ -16,8 +16,8 @@ from pathlib import Path
 
 
 from axcsas.methods.scherrer import (
-    ScherrerCalculatorEnhanced,
-    ScherrerResultEnhanced,
+    ScherrerCalculator,
+    ScherrerResult,
     ValidityFlag,
     calculate_scherrer,
     generate_scherrer_report,
@@ -30,37 +30,39 @@ from axcsas.core.copper_crystal import (
 
 
 class TestKValueLookup:
-    """Tests for dynamic K value selection."""
+    """Tests for dynamic K value selection (K_w for FWHM)."""
     
     def test_k_111_value(self):
-        """K(111) should be 1.155."""
+        """K(111) should be 0.855 (K_w from L&W 1978 Table 2)."""
         k = get_k_for_hkl(1, 1, 1)
-        assert abs(k - 1.155) < 0.001
+        assert abs(k - 0.855) < 0.001
     
     def test_k_200_value(self):
-        """K(200) should be 1.000."""
+        """K(200) should be 0.886 (K_w from L&W 1978 Table 2)."""
         k = get_k_for_hkl(2, 0, 0)
-        assert abs(k - 1.000) < 0.001
+        assert abs(k - 0.886) < 0.001
     
-    def test_k_220_value_updated(self):
-        """K(220) should be 1.061 (not 0.707)."""
+    def test_k_220_value(self):
+        """K(220) should be 0.834 (K_w from L&W 1978 Table 2, via 110)."""
         k = get_k_for_hkl(2, 2, 0)
-        assert abs(k - 1.061) < 0.001  # Updated value
+        assert abs(k - 0.834) < 0.001
     
-    def test_k_311_value_updated(self):
-        """K(311) should be 1.116 (not 0.89)."""
+    def test_k_311_value(self):
+        """K(311) should be 0.908 (K_w from L&W 1978 Table 2)."""
         k = get_k_for_hkl(3, 1, 1)
-        assert abs(k - 1.116) < 0.001  # Updated value
+        assert abs(k - 0.908) < 0.001
     
     def test_k_spherical_fallback(self):
-        """Non-cubic habit should use K=0.89."""
+        """Non-cubic habit should use K=0.829 (L&W 1978 spherical)."""
         k = get_k_for_hkl(1, 1, 1, use_cubic_habit=False)
-        assert abs(k - 0.89) < 0.001
+        assert abs(k - 0.829) < 0.001
     
-    def test_scherrer_cubic_k_class_updated(self):
-        """ScherrerCubicK class should have updated values."""
-        assert abs(SCHERRER_CUBIC_K.K_220 - 1.061) < 0.001
-        assert abs(SCHERRER_CUBIC_K.K_311 - 1.116) < 0.001
+    def test_scherrer_cubic_k_class(self):
+        """ScherrerCubicK class should have K_w values."""
+        assert abs(SCHERRER_CUBIC_K.K_111 - 0.855) < 0.001
+        assert abs(SCHERRER_CUBIC_K.K_200 - 0.886) < 0.001
+        assert abs(SCHERRER_CUBIC_K.K_220 - 0.834) < 0.001
+        assert abs(SCHERRER_CUBIC_K.K_311 - 0.908) < 0.001
 
 
 class TestUnitConversion:
@@ -81,20 +83,22 @@ class TestUnitConversion:
 
 
 class TestDocumentExample:
-    """Test case from document 04 §4."""
+    """Test case from document 04 §4 (updated for K_w)."""
     
     def test_document_example_calculation(self):
         """
-        Verify calculation matches document 04 §4 example.
+        Verify calculation using K_w (FWHM) values.
         
         Input:
             2θ = 43.32°
             FWHM_obs = 0.25°
             FWHM_inst = 0.08°
+            K = 0.855 (K_w for cubic (111) from L&W 1978)
             
-        Expected (using quadratic subtraction β_sample = √(β_obs² - β_inst²)):
-            β_sample = √(0.25² - 0.08²) = 0.237°
-            D ≈ 46.3 nm
+        Calculation:
+            β_sample = √(0.25² - 0.08²) = 0.237° = 0.00414 rad
+            D = Kλ / (β cosθ) = 0.855 × 1.540562 / (0.00414 × cos(21.66°))
+            D = 1.317 / 0.00385 = 342 Å = 34.2 nm
         """
         result = calculate_scherrer(
             two_theta=43.32,
@@ -107,18 +111,17 @@ class TestDocumentExample:
         # β_sample = √(0.0625 - 0.0064) = √0.0561 = 0.2369
         assert abs(result.fwhm_sample - 0.237) < 0.01
         
-        # Check crystallite size (allow 5% tolerance)
-        # Size will be smaller due to larger corrected FWHM
-        assert abs(result.size_nm - 46.3) < 2.5
+        # Check crystallite size (K_w = 0.855, expect ~34 nm)
+        assert 30 < result.size_nm < 40
         
-        # Check K value used
-        assert abs(result.k_factor - 1.155) < 0.01
+        # Check K value used (K_w for (111))
+        assert abs(result.k_factor - 0.855) < 0.01
         
         # Check validity flag
         assert result.validity_flag == ValidityFlag.VALID
     
     def test_spherical_gives_smaller_size(self):
-        """Using spherical K=0.89 should give ~37.8 nm (30% less)."""
+        """Using spherical K=0.829 should give slightly smaller size."""
         result = calculate_scherrer(
             two_theta=43.32,
             fwhm_observed=0.25,
@@ -126,8 +129,9 @@ class TestDocumentExample:
             use_cubic_habit=False
         )
         
-        # Should be ~37.8 nm per document
-        assert abs(result.size_nm - 37.8) < 3.0
+        # K_spherical = 0.829, expect ~33 nm
+        assert 28 < result.size_nm < 38
+        assert abs(result.k_factor - 0.829) < 0.01
 
 
 class TestValidityFlags:
@@ -174,7 +178,7 @@ class TestBatchCalculation:
     
     def test_batch_multiple_peaks(self):
         """Calculate sizes for multiple peaks."""
-        calc = ScherrerCalculatorEnhanced()
+        calc = ScherrerCalculator()
         
         peaks = [
             (43.32, 0.25),   # (111)
@@ -193,7 +197,7 @@ class TestBatchCalculation:
     
     def test_average_size_calculation(self):
         """Test average size from multiple peaks."""
-        calc = ScherrerCalculatorEnhanced()
+        calc = ScherrerCalculator()
         
         peaks = [
             (43.32, 0.25),
@@ -213,7 +217,7 @@ class TestReportGeneration:
     
     def test_report_contains_headers(self):
         """Report should contain expected headers."""
-        calc = ScherrerCalculatorEnhanced()
+        calc = ScherrerCalculator()
         results = [
             calc.calculate(43.32, 0.25, 0.08),
             calc.calculate(50.45, 0.28, 0.08),

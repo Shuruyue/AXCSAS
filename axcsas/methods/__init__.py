@@ -14,10 +14,6 @@ from axcsas.methods.scherrer import (
     calculate_scherrer,
     calculate_crystallite_size,
     generate_scherrer_report,
-    # Backward compatibility
-    ScherrerResultEnhanced,
-    ScherrerCalculatorEnhanced,
-    calculate_scherrer_enhanced,
 )
 
 from axcsas.methods.williamson_hall import (
@@ -27,10 +23,6 @@ from axcsas.methods.williamson_hall import (
     analyze_williamson_hall,
     generate_wh_report,
     get_modulus_for_hkl,
-    # Backward compatibility
-    WHResultEnhanced,
-    WilliamsonHallEnhanced,
-    analyze_williamson_hall_enhanced,
 )
 
 from axcsas.methods.texture import (
@@ -42,10 +34,6 @@ from axcsas.methods.texture import (
     generate_texture_report,
     get_standard_intensity,
     calculate_texture_coefficient,
-    # Backward compatibility
-    TextureResultEnhanced,
-    TextureAnalyzerEnhanced,
-    analyze_texture_enhanced,
 )
 
 from axcsas.methods.caglioti import (

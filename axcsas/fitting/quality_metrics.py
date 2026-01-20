@@ -1,10 +1,9 @@
 """
-Fitting Quality Metrics Module
-==============================
+Fitting Quality Metrics Module 擬合品質評估模組
+==============================================
 
 Quality assessment for XRD peak fitting results.
-
-Reference: 計劃書/03_峰值擬合與參數提取.md §7
+XRD 峰擬合結果的品質評估。
 """
 
 import numpy as np
@@ -58,7 +57,7 @@ class FitQualityReport:
 
 
 # =============================================================================
-# R_wp Calculation (文件 03 §7.1)
+# R_wp Calculation / R_wp 計算
 # =============================================================================
 
 def calculate_r_wp(
@@ -68,8 +67,7 @@ def calculate_r_wp(
 ) -> float:
     """
     Calculate Weighted Profile R-factor (R_wp).
-    
-    Reference: 文件 03 §7.1
+    計算加權剖面 R 因子 (R_wp)。
     
     R_wp = sqrt(Σ w_i (I_obs - I_calc)² / Σ w_i I_obs²) × 100%
     
@@ -145,7 +143,7 @@ def calculate_r_squared(
 
 
 # =============================================================================
-# Fit Validation (文件 03 §7.2)
+# Fit Validation / 擬合驗證
 # =============================================================================
 
 def validate_fit_parameters(
@@ -157,8 +155,7 @@ def validate_fit_parameters(
 ) -> Tuple[bool, List[str]]:
     """
     Validate fitted parameters for physical reasonableness.
-    
-    Reference: 文件 03 §7.2 / §2.2
+    驗證擬合參數的物理合理性。
     
     Physical constraints:
       - η must be in [0, 1]

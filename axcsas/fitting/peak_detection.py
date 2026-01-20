@@ -1,6 +1,8 @@
 """
-Peak Detection Module
+Peak Detection Module 峰值檢測模組
+==================================
 Implements second derivative method for automatic peak finding.
+使用二階導數法進行自動峰值檢測。
 """
 
 import numpy as np

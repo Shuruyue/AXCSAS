@@ -5,17 +5,21 @@
 
 # -----------------------------------------------------------------------------
 # Physical Constants (Locked for Academic Consistency)
+# References:
+#   Bearden, J.A. (1967). X-Ray Wavelengths. Rev. Mod. Phys. 39, 78-124.
+#   Langford, J.I. & Wilson, A.J.C. (1978). Scherrer after Sixty Years.
+#       J. Appl. Cryst. 11, 102-113.
 # -----------------------------------------------------------------------------
 physical_constants:
-  wavelength: 1.54056          # Å, Cu Kα1 (IUPAC Standard)
-  wavelength_ka2: 1.54439      # Å, Cu Kα2
-  ka2_ratio: 0.5               # I(Kα2) / I(Kα1)
+  wavelength: 1.540562         # Cu Ka1 (Bearden 1967, Table V, p.9)
+  wavelength_ka2: 1.544390     # Cu Ka2 (Bearden 1967, Table V, p.9)
+  ka2_ratio: 0.5               # I(Ka2) / I(Ka1) (Burger-Dorgelo rule)
   
-  # Scherrer constant K (Langford & Wilson, 1978)
+  # Scherrer constant K_w for FWHM definition
   scherrer_k:
-    spherical: 0.89            # Spherical grains
-    cubic: 0.94                # Cubic grains
-    default: 0.89              # Default assumption
+    spherical: 0.829           # L&W 1978, p.107, K_w for sphere
+    cubic: 0.94                # Warren (1969), general cubic approximation
+    default: 0.829             # L&W 1978 spherical standard
 
 # -----------------------------------------------------------------------------
 # Instrument Parameters (Caglioti Equation)

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
-from axcsas.core.constants import CU_JCPDS
+from axcsas.core.copper_crystal import CU_JCPDS_EXTENDED
 
 
 # =============================================================================
@@ -26,23 +26,26 @@ from axcsas.core.constants import CU_JCPDS
 # =============================================================================
 
 # JCPDS standard data for Cu (PDF 04-0836)
+# JCPDS standard data for Cu (PDF 04-0836)
+# Derived dynamically from centralized SSOT data
 JCPDS_STANDARD_INTENSITY: Dict[Tuple[int, int, int], float] = {
-    (1, 1, 1): 100.0,
-    (2, 0, 0): 46.0,
-    (2, 2, 0): 20.0,
-    (3, 1, 1): 17.0,
-    (2, 2, 2): 5.0,
+    hkl: data["intensity"] for hkl, data in CU_JCPDS_EXTENDED.items()
 }
 
-CU_JCPDS_STANDARD = {
-    (1, 1, 1): {"two_theta": 43.298, "intensity": 100.0},
-    (2, 0, 0): {"two_theta": 50.434, "intensity": 46.0},
-    (2, 2, 0): {"two_theta": 74.130, "intensity": 20.0},
-    (3, 1, 1): {"two_theta": 89.931, "intensity": 17.0},
-    (2, 2, 2): {"two_theta": 95.139, "intensity": 5.0},
-}
+# Standard peak positions and intensities
+CU_JCPDS_STANDARD = CU_JCPDS_EXTENDED
 
 # TC interpretation thresholds (DATA MARKERS ONLY)
+# EMPIRICAL THRESHOLDS - Commonly used in Harris texture analysis
+#
+# These thresholds are empirical guidelines for interpreting TC values:
+# - TC ∈ [0.9, 1.1]: Random orientation (no preferred orientation)
+# - TC > 1.5: Strong preferred orientation in that direction
+# - TC < 0.9: Suppressed orientation
+#
+# Reference: Harris (1952), Phil. Mag. 43, 113-123 (original TC method)
+#            Commonly accepted interpretation thresholds in XRD community
+#            These specific values are empirical best practices
 TC_RANDOM_MIN = 0.9
 TC_RANDOM_MAX = 1.1
 TC_PREFERRED_THRESHOLD = 1.5
@@ -401,11 +404,5 @@ def calculate_texture_coefficient(
     return result.tc_values
 
 
-# =============================================================================
-# Backward Compatibility Aliases
-# =============================================================================
 
-TextureResultEnhanced = TextureAnalysisResult
-TextureAnalyzerEnhanced = TextureAnalyzer
-analyze_texture_enhanced = analyze_texture
 

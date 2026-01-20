@@ -86,3 +86,6 @@ outputs/
 *.tmp
 *.bak
 *.log
+
+# Internal discussion documents (not for version control)
+.claude/

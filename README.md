@@ -1,91 +1,113 @@
-# AXCSAS 
+# AXCSAS
+
 ## Advanced XRD Crystallite Size Analysis System
 
-基於偽沃伊特卷積與儀器校正的自動化晶粒尺寸計算系統
+Automated crystallite size analysis system using Pseudo-Voigt fitting and instrumental correction.
 
 ---
 
-## 📋 專案簡介
+## Project Overview
 
-AXCSAS 是一套自動化演算法系統，解決傳統手動計算 Scherrer Size 時面臨的：
-- 基線選取主觀誤差
-- 儀器展寬扣除不精確
-- 峰型擬合函數選擇錯誤
+AXCSAS is an automated XRD analysis system that addresses common issues in manual Scherrer size calculations:
 
-### 核心特色
-- **Pseudo-Voigt 全譜擬合**：採用學術界公認最接近真實晶體繞射行為的數學描述
-- **Caglioti 儀器校正**：利用 NIST SRM 660c (LaB₆) 進行全角度儀器寬度校正
-- **高精度預測**：適用於 2-100 nm 範圍內晶粒尺寸
+- Subjective baseline selection errors
+- Inaccurate instrumental broadening correction
+- Incorrect peak profile function selection
 
----
+### Core Features
 
-## 🚀 快速開始
-
-### 安裝依賴
-```bash
-pip install -r requirements.txt
-```
-
-### 儀器校正
-```bash
-python scripts/calibrate_instrument.py --standard data/standards/LaB6_SRM660c.xy
-```
-
-### 樣品分析
-```bash
-python scripts/analyze_sample.py --input data/raw/sample.xy --output outputs/results/
-```
-
-### 批次分析
-```bash
-python scripts/batch_analysis.py --input-dir data/raw/202511/ --output-dir outputs/results/
-```
+- **Pseudo-Voigt Full Spectrum Fitting**: Uses the most physically accurate mathematical description of XRD peak profiles
+- **Caglioti Instrumental Correction**: Full-angle instrumental width correction using NIST SRM 660c (LaB6)
+- **High Precision**: Applicable to crystallite sizes in the 2-100 nm range
 
 ---
 
-## 📁 專案結構
+## Quick Start
 
+### Installation
+
+```bash
+pip install -e .
 ```
+
+Or for development:
+
+```bash
+pip install -e ".[dev]"
+```
+
+### CLI Usage
+
+```bash
+# Run analysis on a single file
+axcsas analyze data/raw/sample.xy
+
+# Generate comprehensive report
+axcsas report --input-dir data/raw/ --output-dir outputs/
+```
+
+### Validation Scripts
+
+```bash
+# Verify 2-theta peak positions (Bragg's Law)
+python scripts/verify_physics.py
+
+# Verify directional Young's modulus (Ledbetter & Naimon)
+python scripts/verify_elastic_moduli.py
+```
+
+---
+
+## Project Structure
+
+```text
 AXCSAS/
-├── config.yaml              # 全域設定檔
-├── data/                    # 數據目錄
-│   ├── raw/                 # 原始 XRD 數據
-│   ├── standards/           # NIST 標準品數據
-│   └── processed/           # 預處理後數據
-├── src/                     # 核心程式碼
-│   ├── preprocessing/       # 數據預處理模組
-│   ├── fitting/             # 峰值擬合核心
-│   ├── physics/             # 物理計算核心
-│   ├── validation/          # 誤差分析與驗證
-│   └── utils/               # 工具函式
-├── scripts/                 # 執行腳本
-├── outputs/                 # 輸出目錄
-├── tests/                   # 單元測試
-└── docs/                    # 文件
+├── config.yaml              # Global configuration
+├── pyproject.toml           # Python project configuration
+├── data/                    # Data directory
+│   ├── raw/                 # Raw XRD data
+│   ├── standards/           # NIST standard data
+│   └── processed/           # Preprocessed data
+├── axcsas/                  # Core source code
+│   ├── core/                # Physical constants and crystallography
+│   ├── preprocessing/       # Data preprocessing modules
+│   ├── fitting/             # Peak fitting core
+│   ├── methods/             # Analysis methods (Scherrer, W-H, Texture)
+│   ├── validation/          # Error analysis and validation
+│   └── visualization/       # Plotting and reports
+├── scripts/                 # Verification scripts
+├── tests/                   # Unit tests
+└── outputs/                 # Output directory
 ```
 
 ---
 
-## 📐 理論基礎
+## Theoretical Background
 
-### Pseudo-Voigt 峰型函數
-$$I(2\theta) = I_0 \cdot [ \eta L(2\theta) + (1-\eta) G(2\theta) ] + Background$$
+### Pseudo-Voigt Peak Profile
 
-### Caglioti 方程式
-$$FWHM_{inst}^2 = U \tan^2\theta + V \tan\theta + W$$
+I(2theta) = I0 * [ eta * L(2theta) + (1-eta) * G(2theta) ] + Background
 
-### Scherrer 方程式
-$$D = \frac{K \lambda}{\beta \cos\theta}$$
+where L is Lorentzian, G is Gaussian, and eta is the mixing parameter.
 
----
+### Caglioti Equation
 
-## 📚 參考文獻
+FWHM_inst^2 = U * tan^2(theta) + V * tan(theta) + W
 
-- Langford, J. I., & Wilson, A. J. C. (1978). *Scherrer after sixty years*. J. Appl. Cryst., 11, 102-113.
-- NIST Standard Reference Material 660c (LaB₆)
+### Scherrer Equation
+
+D = K * lambda / (beta * cos(theta))
 
 ---
 
-## 📄 授權
+## References
+
+1. Bearden, J.A. (1967). X-Ray Wavelengths. Rev. Mod. Phys. 39, 78-124.
+2. Langford, J.I. & Wilson, A.J.C. (1978). Scherrer after Sixty Years. J. Appl. Cryst. 11, 102-113.
+3. NIST Standard Reference Material 660c (LaB6)
+
+---
+
+## License
 
 MIT License

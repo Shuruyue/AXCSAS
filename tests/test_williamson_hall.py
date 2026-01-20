@@ -16,10 +16,10 @@ from pathlib import Path
 
 
 from axcsas.methods.williamson_hall import (
-    WilliamsonHallEnhanced,
-    WHResultEnhanced,
+    WilliamsonHallAnalyzer,
+    WHResult,
     WHQualityLevel,
-    analyze_williamson_hall_enhanced,
+    analyze_williamson_hall,
     generate_wh_report,
     MODULUS_MAP,
     WH_K_FACTOR,
@@ -32,7 +32,9 @@ class TestWHConstants:
     """Tests for W-H constants."""
     
     def test_wh_k_factor(self):
-        """W-H K factor should be 0.9."""
+        """Verify W-H uses correct K factor."""
+        # WH_K_FACTOR is currently 0.9 (average K value)
+        # Note: Could be updated to 0.829 (L&W spherical K_w) for consistency
         assert WH_K_FACTOR == 0.9
     
     def test_r2_thresholds(self):
@@ -41,10 +43,13 @@ class TestWHConstants:
         assert R2_ACCEPTABLE == 0.85
     
     def test_modulus_map_values(self):
-        """MODULUS_MAP should have correct values."""
-        assert MODULUS_MAP[(1, 1, 1)] == 191.0  # Hardest
-        assert MODULUS_MAP[(2, 0, 0)] == 67.0   # Softest
-        assert MODULUS_MAP[(2, 2, 0)] == 130.0
+        """Verify elastic modulus values are from reference."""
+        # Check specific directions - use tolerance for floating point
+        import axcsas.core.copper_crystal as cc
+        assert abs(MODULUS_MAP[(1, 1, 1)] - cc.CopperElasticModuli.E_111) < 0.5
+        assert abs(MODULUS_MAP[(2, 0, 0)] - cc.CopperElasticModuli.E_100) < 0.5
+        assert abs(MODULUS_MAP[(2, 2, 0)] - cc.CopperElasticModuli.E_110) < 0.5
+
 
 
 class TestDocumentExample:
@@ -66,7 +71,7 @@ class TestDocumentExample:
         two_theta = np.array([43.32, 50.45, 74.16, 89.97])
         fwhm = np.array([0.224, 0.251, 0.282, 0.305])
         
-        result = analyze_williamson_hall_enhanced(two_theta, fwhm)
+        result = analyze_williamson_hall(two_theta, fwhm)
         
         # Result should be computed (not failed)
         assert result.n_peaks == 4
@@ -88,7 +93,7 @@ class TestDocumentExample:
         two_theta = np.array([43.32, 50.45, 74.16, 89.97])
         fwhm = np.array([0.224, 0.251, 0.282, 0.305])
         
-        result = analyze_williamson_hall_enhanced(two_theta, fwhm)
+        result = analyze_williamson_hall(two_theta, fwhm)
         
         # If R² is low, warning should be generated
         if result.r_squared < R2_ACCEPTABLE:
@@ -112,7 +117,7 @@ class TestQualityAssessment:
         beta = y_ideal / np.cos(np.arcsin(x))
         fwhm = beta * 180 / np.pi
         
-        result = analyze_williamson_hall_enhanced(two_theta, fwhm)
+        result = analyze_williamson_hall(two_theta, fwhm)
         
         # High R² expected for synthetic linear data
         assert result.r_squared > 0.9
@@ -124,7 +129,7 @@ class TestQualityAssessment:
         # Intentionally scattered FWHM values
         fwhm = np.array([0.224, 0.40, 0.20, 0.45])  # Non-monotonic
         
-        result = analyze_williamson_hall_enhanced(two_theta, fwhm)
+        result = analyze_williamson_hall(two_theta, fwhm)
         
         # Should either have warning or be poor quality
         assert result.warning_message or not result.is_reliable
@@ -138,7 +143,7 @@ class TestDataValidation:
         two_theta = np.array([43.32, 50.45])  # Only 2 peaks
         fwhm = np.array([0.224, 0.251])
         
-        result = analyze_williamson_hall_enhanced(two_theta, fwhm)
+        result = analyze_williamson_hall(two_theta, fwhm)
         
         assert not result.is_reliable
         assert "3" in result.warning_message
@@ -148,7 +153,7 @@ class TestDataValidation:
         two_theta = np.array([43.32, 50.45, 74.16])
         fwhm = np.array([0.224, 0.251])  # Shorter
         
-        result = analyze_williamson_hall_enhanced(two_theta, fwhm)
+        result = analyze_williamson_hall(two_theta, fwhm)
         
         assert not result.is_reliable
 
@@ -162,7 +167,7 @@ class TestAnisotropyDiagnostics:
         # Intentionally scattered values
         fwhm = np.array([0.30, 0.15, 0.40, 0.20])
         
-        result = analyze_williamson_hall_enhanced(two_theta, fwhm)
+        result = analyze_williamson_hall(two_theta, fwhm)
         
         # If R² is poor, should have anisotropy note
         if result.r_squared < R2_ACCEPTABLE:
@@ -178,7 +183,7 @@ class TestReportGeneration:
         two_theta = np.array([43.32, 50.45, 74.16, 89.97])
         fwhm = np.array([0.224, 0.251, 0.282, 0.305])
         
-        result = analyze_williamson_hall_enhanced(two_theta, fwhm)
+        result = analyze_williamson_hall(two_theta, fwhm)
         report = generate_wh_report(result, "Test Sample")
         
         assert "Williamson-Hall" in report
@@ -196,7 +201,7 @@ class TestPlotData:
         two_theta = np.array([43.32, 50.45, 74.16, 89.97])
         fwhm = np.array([0.224, 0.251, 0.282, 0.305])
         
-        analyzer = WilliamsonHallEnhanced()
+        analyzer = WilliamsonHallAnalyzer()
         x_data, y_data, x_fit, y_fit = analyzer.get_plot_data(two_theta, fwhm)
         
         assert len(x_data) == 4

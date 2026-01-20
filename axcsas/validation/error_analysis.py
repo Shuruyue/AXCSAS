@@ -1,6 +1,8 @@
 """
-Error Analysis Module
+Error Analysis Module 誤差分析模組
+===================================
 Implements instrumental limits and reliability validation.
+實現儀器限制和可靠性驗證。
 """
 
 import numpy as np

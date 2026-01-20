@@ -1,8 +1,11 @@
 """
-Pseudo-Voigt Function Module
+Pseudo-Voigt Function Module 偽Voigt函數模組
+=============================================
 Implements the Pseudo-Voigt profile function for XRD peak fitting.
+實現用於 XRD 峰擬合的偽Voigt剖面函數。
 
 Also includes True Voigt profile using scipy.special.voigt_profile.
+另包含使用 scipy.special.voigt_profile 的真Voigt剖面。
 """
 
 import numpy as np

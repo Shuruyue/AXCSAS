@@ -32,6 +32,25 @@ from axcsas.preprocessing import (
 class TestXRDDataset:
     """Tests for XRDDataset container."""
     
+    def test_strip_ka2_basic(self):
+        """Test basic stripping logic."""
+        two_theta = np.linspace(20, 80, 1000)
+        intensity = np.random.rand(1000) * 100
+        
+        stripper = KalphaStripper(
+            ka1_lambda=1.5406,
+            ka2_lambda=1.5444,
+            ka_ratio=0.5
+        )
+        ds = XRDDataset(two_theta, intensity)
+        
+        # This test needs more specific assertions about the stripping effect
+        # For now, just ensure it runs without error and returns a dataset
+        stripped_intensity = stripper.strip(ds.two_theta, ds.intensity)
+        
+        assert len(stripped_intensity) == len(ds.intensity)
+        assert not np.array_equal(stripped_intensity, ds.intensity) # Intensity should change
+        
     def test_dataset_creation(self):
         """Test basic dataset creation."""
         two_theta = np.linspace(20, 80, 1000)

@@ -24,13 +24,36 @@ from axcsas.core.constants import CU_KA1, SCHERRER_K
 # Constants
 # =============================================================================
 
-WAVELENGTH_CU_KA1 = CU_KA1  # Å
-WH_K_FACTOR = 0.9  # Average K value for W-H
+# 波長常數直接使用 CU_KA1 / Wavelength: use CU_KA1 directly
 
-# R² quality thresholds
-R2_EXCELLENT = 0.95
-R2_ACCEPTABLE = 0.85
-MIN_PEAKS = 3
+# Williamson-Hall K 因子 / Williamson-Hall K factor
+# ═══════════════════════════════════════════════════════════════════════════
+# 文獻出處 Reference:
+#     Williamson, G. K., & Hall, W. H. (1953).
+#     "X-ray line broadening from filed aluminium and wolfram."
+#     Acta Metallurgica, 1(1), 22-31.
+#     DOI: 10.1016/0001-6160(53)90006-6
+#
+# 說明 Note:
+#     K ≈ 0.9 為 Scherrer/Williamson-Hall 常用平均值
+#     取決於晶粒形狀與定義（FWHM 或積分寬度）
+#     K ≈ 0.9 is commonly used average for Scherrer/W-H analysis
+# ═══════════════════════════════════════════════════════════════════════════
+WH_K_FACTOR = 0.9
+
+# R² 品質閾值 / R² quality thresholds
+# ═══════════════════════════════════════════════════════════════════════════
+# 使用者自定義 / USER-DEFINED PARAMETERS
+# ═══════════════════════════════════════════════════════════════════════════
+# 這些閾值由使用者根據實驗需求設定，用於線性擬合品質評估
+# These thresholds are user-defined for linear regression quality assessment
+#
+# 可根據需求調整（如改為 0.99 以獲得更嚴格的品質要求）
+# Can be adjusted based on requirements (e.g., 0.99 for stricter criteria)
+# ═══════════════════════════════════════════════════════════════════════════
+R2_EXCELLENT = 0.95    # 優良 / Excellent
+R2_ACCEPTABLE = 0.85   # 可接受 / Acceptable
+MIN_PEAKS = 3          # W-H 線性迴歸最少需要 3 點 / Minimum 3 peaks for linear regression
 
 # Copper elastic anisotropy
 MODULUS_MAP: Dict[Tuple[int, int, int], float] = {
@@ -145,7 +168,7 @@ class WilliamsonHallAnalyzer:
 
     def __init__(
         self,
-        wavelength: float = WAVELENGTH_CU_KA1,
+        wavelength: float = CU_KA1,
         k_factor: float = WH_K_FACTOR
     ) -> None:
         self.wavelength = wavelength

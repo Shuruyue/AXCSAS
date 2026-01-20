@@ -32,14 +32,6 @@ from axcsas.core.copper_crystal import (
     ELECTROPLATED_A_STANDARD,
 )
 
-from axcsas.core.additives import (
-    AdditiveType,
-    Additive,
-    SUPPRESSOR,
-    ACCELERATOR,
-    LEVELER_JGB,
-    get_additive,
-)
 
 
 class TestCopperCrystalConstants:
@@ -73,7 +65,7 @@ class TestJCPDSData:
     
     def test_jcpds_111_two_theta(self):
         """TC-002: Verify (111) 2θ position."""
-        assert CU_JCPDS_EXTENDED[(1, 1, 1)]["two_theta"] == 43.297
+        assert CU_JCPDS_EXTENDED[(1, 1, 1)]["two_theta"] == 43.316
         
     def test_jcpds_completeness(self):
         """TC-003: Verify all 5 standard peaks are present."""
@@ -122,30 +114,30 @@ class TestScherrerCubicK:
     """Tests for direction-dependent Scherrer K values."""
     
     def test_k_111_cubic_habit(self):
-        """TC-005: K(111) should be 1.155 for cubic habit."""
+        """TC-005: K(111) should be 0.855 for cubic habit (FWHM)."""
         k = get_k_for_hkl(1, 1, 1, use_cubic_habit=True)
-        assert abs(k - 1.155) < 0.001
+        assert abs(k - 0.855) < 0.001
         
     def test_k_200_cubic_habit(self):
-        """TC-006: K(200) should be 1.000 for cubic habit."""
+        """TC-006: K(200) should be 0.886 for cubic habit (FWHM)."""
         k = get_k_for_hkl(2, 0, 0, use_cubic_habit=True)
-        assert abs(k - 1.000) < 0.001
+        assert abs(k - 0.886) < 0.001
         
     def test_k_220_cubic_habit(self):
-        """K(220) should be 1.061 for cubic habit (文件 04 §2.2)."""
+        """K(220) should be 0.834 for cubic habit (FWHM)."""
         k = get_k_for_hkl(2, 2, 0, use_cubic_habit=True)
-        assert abs(k - 1.061) < 0.001
+        assert abs(k - 0.834) < 0.001
         
     def test_k_spherical_fallback(self):
-        """Spherical assumption should return 0.89."""
+        """Spherical assumption should return 0.829."""
         k = get_k_for_hkl(1, 1, 1, use_cubic_habit=False)
-        assert k == 0.89
+        assert k == 0.829
         
     def test_k_constants_dataclass(self):
         """Verify ScherrerCubicK dataclass values."""
-        assert SCHERRER_CUBIC_K.K_111 == 1.155
-        assert SCHERRER_CUBIC_K.K_200 == 1.000
-        assert SCHERRER_CUBIC_K.K_SPHERICAL == 0.89
+        assert SCHERRER_CUBIC_K.K_111 == 0.855
+        assert SCHERRER_CUBIC_K.K_200 == 0.886
+        assert SCHERRER_CUBIC_K.K_SPHERICAL == 0.829
 
 
 class TestElasticAnisotropy:
@@ -208,23 +200,24 @@ class TestLatticeValidation:
         assert "as-deposited" in explanation
 
 
-class TestAdditives:
-    """Tests for additive database."""
+
+class TestElasticProperties:
+    """Tests for elastic moduli constants."""
     
-    def test_additive_types_exist(self):
-        """TC-008: Verify 3 additive types exist."""
-        assert len(AdditiveType) == 3
+    def test_elastic_constants_values(self):
+        """Verify elastic moduli match Simmons & Wang (1971) precise values."""
+        # Check values are updated to precise calculation
+        assert CU_ELASTIC.E_111 == 191.1
+        assert CU_ELASTIC.E_100 == 66.7
+        assert CU_ELASTIC.E_110 == 130.3
         
-    def test_suppressor_properties(self):
-        """Verify suppressor additive properties."""
-        assert SUPPRESSOR.type == AdditiveType.SUPPRESSOR
-        assert "PEG" in SUPPRESSOR.common_chemicals
+        # Check isotropic VRH average
+        assert CU_ELASTIC.E_isotropic == 127.3
         
-    def test_get_additive_by_name(self):
-        """Test additive lookup."""
-        additive = get_additive("jgb")
-        assert additive is not None
-        assert additive.type == AdditiveType.LEVELER
+    def test_zener_anisotropy(self):
+        """Verify Zener anisotropy ratio is consistent."""
+        ratio = CU_ELASTIC.E_111 / CU_ELASTIC.E_100
+        assert 2.8 < ratio < 3.0  # Approx 2.9
 
 
 class TestCalculations:

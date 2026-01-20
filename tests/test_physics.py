@@ -23,6 +23,52 @@ from axcsas.methods import (
 )
 
 
+
+from axcsas.core.constants import CU_KA1
+from axcsas.core.copper_crystal import CU_JCPDS_EXTENDED, CU_CRYSTAL
+
+
+class TestPhysicsVerification:
+    """
+    Rigorous verification of physical constants and derived values.
+    Establishes Single Source of Truth validation.
+    """
+    
+    def test_theoretical_peak_positions(self):
+        """
+        Verify that stored JCPDS 2theta values match theoretical Bragg Law calculations.
+        
+        Formula: 2θ = 2 * arcsin( λ / 2d )
+        where d = a / sqrt(h² + k² + l²)
+        
+        Constants:
+            λ (Cu Kα1) = 1.540562 Å (Bearden 1967)
+            a₀ (Cu)    = 3.6150 Å   (JCPDS 04-0836)
+        """
+        lambda_ka1 = CU_KA1
+        a0 = CU_CRYSTAL.lattice_constant
+        
+        print(f"\nVerifying Physics with λ={lambda_ka1} Å, a={a0} Å")
+        
+        for hkl, data in CU_JCPDS_EXTENDED.items():
+            h, k, l = hkl
+            stored_2theta = data["two_theta"]
+            
+            # 1. Calculate theoretical d-spacing
+            d_theoretical = a0 / np.sqrt(h**2 + k**2 + l**2)
+            
+            # 2. Calculate theoretical 2theta
+            sin_theta = lambda_ka1 / (2 * d_theoretical)
+            theta_rad = np.arcsin(sin_theta)
+            two_theta_calc = 2 * np.degrees(theta_rad)
+            
+            # Verify with high precision (0.001 deg)
+            diff = abs(stored_2theta - two_theta_calc)
+            
+            assert diff < 0.001, \
+                f"Physical inconsistency for ({h}{k}{l}): Stored={stored_2theta}, Calc={two_theta_calc:.5f}, Diff={diff:.5f}"
+
+
 class TestScherrerCalculator:
     """Tests for Scherrer equation calculations."""
     
@@ -37,7 +83,7 @@ class TestScherrerCalculator:
         
     def test_known_values(self):
         """Test against known reference values."""
-        calc = ScherrerCalculator(wavelength=1.54056)
+        calc = ScherrerCalculator(wavelength=1.540562)
         
         # For 2θ=43.3°, FWHM=0.5°, expected ~17 nm
         result = calc.calculate(two_theta=43.3, fwhm_observed=0.5)
@@ -112,7 +158,7 @@ class TestWilliamsonHallAnalyzer:
         
     def test_zero_strain_case(self):
         """Test case with no strain broadening."""
-        wh = WilliamsonHallAnalyzer(wavelength=1.54056, k_factor=0.89)
+        wh = WilliamsonHallAnalyzer(wavelength=1.540562, k_factor=0.89)
         
         # Pure size broadening (constant β)
         two_theta = np.array([43.3, 50.4, 74.1, 89.9])

@@ -1,6 +1,12 @@
 """
-Caglioti Equation Module
+Caglioti Equation Module Caglioti方程模組
+==========================================
 Implements instrumental broadening correction using Caglioti equation.
+使用 Caglioti 方程實現儀器展寬校正。
+
+Reference 出處:
+    Caglioti, G., Paoletti, A., & Ricci, F. P. (1958).
+    Nucl. Instr., 3, 223-228.
 """
 
 import numpy as np
@@ -96,7 +102,7 @@ class CagliotiCorrection:
         
         This is valid when β_obs > 1.2 × β_inst (error < 1%)
         
-        Reference: 文件 02 §5.4
+        Note 注意:
             "忽視儀器展寬會嚴重低估晶粒尺寸（特別是 D > 50 nm）"
         
         Args:

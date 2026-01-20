@@ -11,8 +11,9 @@ import pytest
 import sys
 from pathlib import Path
 
-# Add src to path
 
+from axcsas.core.constants import CU_KA1
+from axcsas.core.copper_crystal import CU_JCPDS_EXTENDED
 
 from axcsas.methods.defect_analysis import (
     StackingFaultAnalyzer,
@@ -41,16 +42,21 @@ class TestConstants:
     """Tests for physical constants."""
     
     def test_standard_peak_separation(self):
-        """Standard (111)-(200) separation should be 7.136°."""
-        assert STANDARD_PEAK_SEPARATION == 7.136
+        """Standard (111)-(200) separation should be ~7.132° (Calculated from SSOT)."""
+        # 50.448 - 43.316 = 7.132
+        assert STANDARD_PEAK_SEPARATION == pytest.approx(7.132, abs=0.001)
     
     def test_warren_coefficient(self):
-        """Warren G coefficient should be -20.0 (corrected per Doc 07 §3.3).
+        """Warren G coefficient should be the theoretical value from Warren (1969).
         
-        Empirical relation: every 0.2° deviation corresponds to α = 1%
-        Therefore: G = -0.2 / 0.01 = -20
+        Theoretical derivation (Warren 1969, Ch.13, pp.275-298):
+            G = -45√3 / π² ≈ -7.897 (degrees per unit probability)
+            
+        This replaces the previous empirical value of -20.0.
         """
-        assert WARREN_G_COEFFICIENT == -20.0
+        import math
+        expected_G = -45 * math.sqrt(3) / (math.pi ** 2)  # ≈ -7.8972
+        assert WARREN_G_COEFFICIENT == pytest.approx(expected_G, abs=0.001)
     
     def test_standard_lattice_constant(self):
         """Standard Cu lattice constant should be 3.6150 Å."""

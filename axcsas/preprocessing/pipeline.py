@@ -1,14 +1,14 @@
 """
-XRD Preprocessing Pipeline
-==========================
+XRD Preprocessing Pipeline XRD 預處理管道
+==========================================
 
-Orchestrates the complete preprocessing workflow for XRD data:
-1. Data loading and validation
-2. Savitzky-Golay smoothing
-3. Background subtraction
-4. Kα2 stripping (conditional)
+Orchestrates the complete preprocessing workflow for XRD data.
+協調 XRD 資料的完整預處理工作流程。
 
-Reference: 計劃書/02_XRD數據採集與預處理.md §6
+1. Data loading and validation 資料載入與驗證
+2. Savitzky-Golay smoothing 平滑
+3. Background subtraction 背景扣除
+4. Kα2 stripping (conditional) Kα2 剥離
 """
 
 import numpy as np
@@ -89,11 +89,13 @@ class PreprocessingResult:
 class PreprocessingPipeline:
     """
     XRD data preprocessing pipeline.
+    XRD 資料預處理管道。
     
     Orchestrates the complete preprocessing workflow with configurable
     parameters and optional steps.
+    使用可配置參數和可選步驟協調完整的預處理工作流程。
     
-    Processing Order (per 文件 02 §6):
+    Processing Order:
     1. Data validation
     2. Savitzky-Golay smoothing
     3. Background subtraction
@@ -105,7 +107,7 @@ class PreprocessingPipeline:
         >>> print(result.summary())
     """
     
-    # Default parameters from 文件 02 §7
+    # Default parameters / 預設參數
     DEFAULT_WINDOW_SIZE = 11
     DEFAULT_POLY_ORDER = 3
     DEFAULT_BG_METHOD = "chebyshev"
@@ -275,10 +277,7 @@ class PreprocessingPipeline:
         
         # Step 4: Kα2 stripping (conditional)
         if self.enable_kalpha_strip:
-            should_strip = should_apply_kalpha_stripping(two_theta)
-            
-            if should_strip:
-                t0 = time.perf_counter()
+            if should_apply_kalpha_stripping(two_theta):
                 current_intensity = self.kalpha_stripper.strip(
                     two_theta, current_intensity
                 )
@@ -327,8 +326,9 @@ def should_apply_kalpha_stripping(
 ) -> bool:
     """
     Determine if Kα2 stripping should be applied.
+    判定是否應用 Kα2 剥離。
     
-    Physical Rationale (引用文件 02 §4.1):
+    Physical Rationale 物理依據:
         At low angles (2θ < 40°), the Kα1/Kα2 doublet is not resolved
         and stripping has minimal effect. At high angles (2θ > 60°),
         the doublet becomes clearly separated and must be corrected.
@@ -346,8 +346,7 @@ def should_apply_kalpha_stripping(
 def get_kalpha_shift_table() -> Dict[int, float]:
     """
     Return reference table of Kα1-Kα2 angular shifts.
-    
-    Reference: 文件 02 §4.3
+    返回 Kα1-Kα2 角度偏移參考表。
     
     Returns:
         Dictionary mapping 2θ (degrees) to Δ2θ (degrees)
