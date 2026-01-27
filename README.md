@@ -60,7 +60,6 @@ python scripts/verify_elastic_moduli.py
 
 ## Project Structure
 
-```text
 AXCSAS/
 ├── config.yaml              # Global configuration
 ├── pyproject.toml           # Python project configuration
@@ -75,10 +74,12 @@ AXCSAS/
 │   ├── methods/             # Analysis methods (Scherrer, W-H, Texture)
 │   ├── validation/          # Error analysis and validation
 │   └── visualization/       # Plotting and reports
-├── scripts/                 # Verification scripts
+├── scripts/                 # Verification & Utility scripts
 ├── tests/                   # Unit tests
-└── outputs/                 # Output directory
-```
+├── docs/                    # User documentation (API, Guides)
+├── dev_notes/               # Developer notes & technical details
+├── references/              # Literature references (PDFs)
+└── outputs/                 # Output directory (Ignored by Git)
 
 ---
 

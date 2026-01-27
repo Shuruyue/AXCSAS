@@ -90,9 +90,11 @@ outputs/
 # Internal discussion documents (not for version control)
 .claude/
 
-# PDF documents (reference materials, not for version control)
-*.pdf
 
-# Audit/reference materials folder
-審核資料/
+# Internal Development Notes
+dev_notes/
+
+# Reference Materials (PDFs)
+references/*.pdf
+
 

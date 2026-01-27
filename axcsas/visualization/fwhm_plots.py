@@ -22,7 +22,7 @@ def plot_fwhm_evolution(
     data: List[Dict[str, Any]],
     x_param: str = "concentration",
     output_path: Optional[str] = None,
-    dpi: int = 2400,
+    dpi: int = 1200,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (12, 8),
@@ -88,20 +88,36 @@ def plot_fwhm_evolution(
     x_label = x_labels.get(x_param, x_param)
 
     # Determine grouping variable (opposite of x_param)
+    # CRITICAL FIX: Collect ALL unique values from data first to avoid KeyError
     if x_param == 'concentration':
         # Group by time when plotting against concentration
         group_key = 'time'
-        group_values = sorted(set(sample.get('time', 0) for sample in data))
+        # Get ALL unique time values from entire dataset
+        group_values = sorted(set(sample.get(group_key, 0) for sample in data))
         colors_by_group = get_color_palette(len(group_values))
         group_color_map = dict(zip(group_values, colors_by_group))
         label_format = lambda g: f'{g:.0f}h'
     else:
         # Group by concentration when plotting against time
         group_key = 'concentration'
-        group_values = sorted(set(sample.get('concentration', 0) for sample in data))
+        # Get ALL unique concentration values from entire dataset
+        group_values = sorted(set(sample.get(group_key, 0) for sample in data))
         colors_by_group = get_color_palette(len(group_values))
         group_color_map = dict(zip(group_values, colors_by_group))
         label_format = lambda g: f'{g} mL/1.5L'
+    
+    # Different line styles and markers for different concentrations/times
+    line_styles_list = ['-', '--', '-.', ':']
+    markers_list = ['o', 's', '^', 'D']
+    
+    group_linestyle_map = {
+        g: line_styles_list[i % len(line_styles_list)]
+        for i, g in enumerate(group_values)
+    }
+    group_marker_map = {
+        g: markers_list[i % len(markers_list)]
+        for i, g in enumerate(group_values)
+    }
     
     # Plot each hkl
     for idx, hkl in enumerate(hkl_list):
@@ -118,9 +134,14 @@ def plot_fwhm_evolution(
             y_errs = []
             
             for sample in data:
-                if sample.get(group_key, 0) != group_val:
+                # Get group value consistently
+                sample_group_val = sample.get(group_key, 0)
+                if sample_group_val != group_val:
                     continue
-                x_val = sample.get(x_param, sample.get('time', 0))
+                    
+                # Get x value consistently
+                x_val = sample.get(x_param, 0)
+                
                 for peak in sample.get('peaks', []):
                     if peak['hkl'] == hkl:
                         x_vals.append(x_val)
@@ -128,7 +149,10 @@ def plot_fwhm_evolution(
                         y_errs.append(peak.get('fwhm_error', 0.0))
                             
             if x_vals:
-                color = group_color_map[group_val]
+                # Use .get() with default color to handle edge cases
+                color = group_color_map.get(group_val, colors_by_group[0])
+                linestyle = group_linestyle_map[group_val]
+                marker = group_marker_map[group_val]
                 # Sort
                 indices = np.argsort(x_vals)
                 x_s = np.array(x_vals)[indices]
@@ -138,10 +162,10 @@ def plot_fwhm_evolution(
                 label = label_format(group_val)
                 
                 # Plot with error bars
-                ax.errorbar(x_s, y_s, yerr=e_s, fmt='o', c=color, markersize=8, 
+                ax.errorbar(x_s, y_s, yerr=e_s, fmt=marker, c=color, markersize=7, 
                            ecolor=color, elinewidth=1.5, capsize=4, alpha=0.8,
                            markeredgecolor='black', markeredgewidth=0.5, label=label)
-                ax.plot(x_s, y_s, c=color, alpha=0.6, linestyle='-', linewidth=2.0)
+                ax.plot(x_s, y_s, c=color, alpha=0.7, linestyle=linestyle, linewidth=2.0)
 
         # Instrument limit visualization
         # 1. Solid red for <0.03° (fully unreliable - below instrument resolution)
@@ -191,7 +215,7 @@ def plot_fwhm_evolution(
 def plot_fwhm_by_peak(
     results: List[Dict[str, Any]],
     output_path: Optional[str] = None,
-    dpi: int = 2400,
+    dpi: int = 1200,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (10, 6),
@@ -290,7 +314,7 @@ def plot_fwhm_by_peak(
 def plot_fwhm_by_concentration(
     data: List[Dict[str, Any]],
     output_path: Optional[str] = None,
-    dpi: int = 2400,
+    dpi: int = 1200,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (16, 10),
@@ -349,8 +373,12 @@ def plot_fwhm_by_concentration(
     for idx, conc in enumerate(concentrations):
         ax = axes[idx]
         
+        # Define distinct styles for peaks (consistent with evolution plot)
+        markers = ['o', 's', '^', 'D', 'v', '<', '>']
+        linestyles = ['-', '--', '-.', ':']
+        
         # Plot each peak direction
-        for hkl in hkl_list:
+        for peak_idx, hkl in enumerate(hkl_list):
             x_values = []
             y_values = []
             
@@ -370,16 +398,22 @@ def plot_fwhm_by_concentration(
             
             if x_vals:
                 color = hkl_color_map[hkl]
+                # Style assignment
+                marker = markers[peak_idx % len(markers)]
+                linestyle = linestyles[peak_idx % len(linestyles)]
+                
                 # Sort by time
                 indices = np.argsort(x_vals)
                 x_s = np.array(x_vals)[indices]
                 y_s = np.array(y_vals)[indices]
                 e_s = np.array(y_errs)[indices]
                 
-                ax.errorbar(x_s, y_s, yerr=e_s, fmt='o', c=color, markersize=8,
-                           ecolor=color, elinewidth=1.5, capsize=4, alpha=0.8,
-                           markeredgecolor='black', markeredgewidth=0.5, label=hkl)
-                ax.plot(x_s, y_s, c=color, alpha=0.6, linestyle='-', linewidth=2.0)
+                # Plot with error bars (markers only)
+                ax.errorbar(x_s, y_s, yerr=e_s, fmt=marker, c=color, markersize=7,
+                           ecolor=color, elinewidth=1.5, capsize=4, alpha=0.9,
+                           markeredgecolor='black', markeredgewidth=0.5, label=hkl, zorder=3)
+                # Plot connecting lines
+                ax.plot(x_s, y_s, c=color, alpha=0.7, linestyle=linestyle, linewidth=2.0, zorder=2)
         
         # Instrument limit visualization
         # 1. Solid red for <0.03° (fully unreliable - below instrument resolution)

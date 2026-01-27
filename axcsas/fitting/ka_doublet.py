@@ -17,7 +17,7 @@ Cu Kα wavelengths 波長 (Bearden 1967, Rev. Mod. Phys. 39, 78):
 import numpy as np
 from scipy.optimize import curve_fit, least_squares, minimize
 from scipy.ndimage import gaussian_filter1d
-from typing import Tuple, Optional, Dict
+from typing import Tuple, Optional, Dict, Any
 from dataclasses import dataclass
 
 from .pseudo_voigt import PseudoVoigt, PseudoVoigtParams, TrueVoigt
@@ -40,12 +40,18 @@ class DoubletFitResult:
     success: bool
     message: str
     fwhm_error: float = 0.0    # Standard error of FWHM
+    center_error: float = 0.0  # Standard error of center
+    eta_error: float = 0.0     # Standard error of eta
     fitted_curve: Optional[np.ndarray] = None
+    opt_result: Optional[Any] = None  # Optimization result with Jacobian
     
     @property
     def fwhm_ka1(self) -> float:
         """FWHM of Kα₁ peak (primary result)."""
         return self.fwhm
+
+
+
 
 
 def theta2_from_wavelength_shift(theta1: float, lambda1: float, lambda2: float) -> float:
@@ -201,7 +207,7 @@ class DoubletFitter:
     def __init__(
         self,
         intensity_ratio: float = KA2_KA1_RATIO,
-        max_iterations: int = 5000,  # Increased for better convergence
+        max_iterations: int = 100000,  # Increased for better convergence
         tolerance: float = 1e-8
     ):
         """
@@ -221,20 +227,20 @@ class DoubletFitter:
         x: np.ndarray,
         center_ka1: float,
         amplitude_ka1: float,
-        fwhm: float,
-        eta: float,
+        sigma: float,
+        gamma: float,
         slope: float,
         intercept: float
     ) -> np.ndarray:
         """
-        Calculate Kα₁ + Kα₂ doublet profile.
+        Calculate Kα₁ + Kα₂ doublet profile using True Voigt.
         
         Args:
             x: 2θ array
             center_ka1: Kα₁ peak center
             amplitude_ka1: Kα₁ amplitude
-            fwhm: Shared FWHM
-            eta: Shared mixing parameter
+            sigma: Gaussian width parameter
+            gamma: Lorentzian width parameter
             slope, intercept: Linear background
             
         Returns:
@@ -244,9 +250,9 @@ class DoubletFitter:
         center_ka2 = calculate_ka2_position(center_ka1)
         amplitude_ka2 = amplitude_ka1 * self.intensity_ratio
         
-        # Sum of both peaks + background
-        ka1 = PseudoVoigt.profile(x, center_ka1, amplitude_ka1, fwhm, eta)
-        ka2 = PseudoVoigt.profile(x, center_ka2, amplitude_ka2, fwhm, eta)
+        # Sum of both peaks + background using True Voigt
+        ka1 = TrueVoigt.profile(x, center_ka1, amplitude_ka1, sigma, gamma)
+        ka2 = TrueVoigt.profile(x, center_ka2, amplitude_ka2, sigma, gamma)
         background = slope * x + intercept
         
         return ka1 + ka2 + background
@@ -259,7 +265,7 @@ class DoubletFitter:
         initial_fwhm: float = 0.3
     ) -> DoubletFitResult:
         """
-        Fit Kα₁/Kα₂ doublet to data.
+        Fit Kα₁/Kα₂ doublet to data using True Voigt model.
         
         Args:
             two_theta: 2θ array
@@ -289,7 +295,7 @@ class DoubletFitter:
             slope_init = 0.0
         intercept_init = left_bg - slope_init * left_x
         
-        # Improved initial FWHM estimation using weighted half-maximum
+        # Improved initial FWHM estimation
         bg_level = min(left_bg, right_bg)
         half_max = (peak_amp + bg_level) / 2
         above_half = intensity > half_max
@@ -299,11 +305,19 @@ class DoubletFitter:
             if right_idx > left_idx:
                 initial_fwhm = max(two_theta[right_idx] - two_theta[left_idx], 0.15)
         
+        # Initial guesses for Sigma and Gamma from FWHM
+        # Assume initial mix is 50/50 Gaussian/Lorentzian (eta=0.5)
+        # fL = 0.5 * fwhm, fG = 0.5 * fwhm
+        # sigma = fG / (2*sqrt(2*ln2)) ≈ fG / 2.355
+        # gamma = fL / 2
+        sigma_init = (0.5 * initial_fwhm) / 2.35482
+        gamma_init = (0.5 * initial_fwhm) / 2.0
+        
         # Multi-start optimization for robustness
         best_result = None
         best_r_sq = -1
         
-        # Define residual function ONCE outside loop (avoids closure issues)
+        # Define residual function ONCE outside loop
         profile_func = self._doublet_profile
         
         def make_residual(x_data, y_data):
@@ -313,14 +327,25 @@ class DoubletFitter:
         
         residual_func = make_residual(two_theta, intensity)
         
-        # Define bounds once
-        lb = np.array([two_theta.min(), 10, 0.05, 0.0, -1e6, -1e6])
-        ub = np.array([two_theta.max(), peak_amp * 3, 2.0, 1.0, 1e6, 1e6])
+        # Define bounds for [center, amp, sigma, gamma, slope, intercept]
+        # sigma, gamma > 0
+        lb = np.array([two_theta.min(), 10, 1e-4, 1e-4, -1e6, -1e6])
+        ub = np.array([two_theta.max(), peak_amp * 3, 2.0, 2.0, 1e6, 1e6])
         
-        # Try multiple initial eta values (Lorentzian/Gaussian mixing)
-        for eta_init in [0.3, 0.5, 0.7]:
-            # Initial parameters: [center_ka1, amplitude_ka1, fwhm, eta, slope, intercept]
-            x0 = np.array([initial_center, peak_amp * 0.8, initial_fwhm, eta_init, slope_init, intercept_init])
+        # Try multiple initial ratios
+        for ratio in [0.3, 0.5, 0.7]:
+            # Adjust init params based on ratio (ratio ~ gamma/(sigma+gamma) roughly)
+            this_gamma = initial_fwhm * ratio / 2.0
+            this_sigma = initial_fwhm * (1-ratio) / 2.35482
+            
+            x0 = np.array([
+                initial_center, 
+                peak_amp * 0.8, 
+                this_sigma, 
+                this_gamma, 
+                slope_init, 
+                intercept_init
+            ])
             
             try:
                 # Use least_squares with strict iteration limit
@@ -329,9 +354,9 @@ class DoubletFitter:
                     x0,
                     bounds=(lb, ub),
                     method='trf',
-                    ftol=self.tolerance,
-                    xtol=1e-10,
-                    gtol=1e-10,
+                    ftol=self.tolerance, # Inherited from class init
+                    xtol=1e-12,         # High precision
+                    gtol=1e-12,
                     max_nfev=self.max_iterations,
                     verbose=0
                 )
@@ -346,34 +371,72 @@ class DoubletFitter:
                     
                     if r_sq > best_r_sq:
                         best_r_sq = r_sq
-                        center_ka2 = calculate_ka2_position(popt[0])
+                        
+                        # Extract params
+                        center_val = popt[0]
+                        amp_val = popt[1]
+                        sigma_val = popt[2]
+                        gamma_val = popt[3]
+                        
+                        center_ka2 = calculate_ka2_position(center_val)
+                        
+                        # Convert back to standard reporting metrics
+                        # FWHM total
+                        fwhm_total = TrueVoigt.fwhm_from_params(sigma_val, gamma_val)
+                        
+                        # Effective Eta: fL / FWHM_total (Standard approximation)
+                        # fL = 2 * gamma
+                        fwhm_lorentzian = 2.0 * gamma_val
+                        eta_eff = fwhm_lorentzian / fwhm_total if fwhm_total > 0 else 0.5
                         
                         # Calculate standard errors from Jacobian
                         fwhm_err = 0.0
+                        center_err = 0.0
+                        eta_err = 0.0
+                        
                         try:
-                            # Estimate covariance matrix
                             jac = result.jac
-                            # s_sq = cost * 2 / (m - n)
                             s_sq = 2 * result.cost / (len(intensity) - len(popt))
                             pcov = s_sq * np.linalg.inv(jac.T @ jac)
                             perr = np.sqrt(np.diag(pcov))
-                            fwhm_err = perr[2] # FWHM is index 2
+                            
+                            # error[0] is center error
+                            center_err = perr[0]
+                            
+                            # Error propagation for FWHM (approximate)
+                            sigma_err = perr[2]
+                            gamma_err = perr[3]
+                            fwhm_err = sigma_err * 2.35 + gamma_err * 2.0
+                            
+                            # Error propagation for Eta (approximate)
+                            # Eta ~ 2*Gamma / FWHM
+                            if fwhm_total > 0 and gamma_val > 0:
+                                rel_gamma = gamma_err / gamma_val
+                                rel_fwhm = fwhm_err / fwhm_total
+                                eta_err = eta_eff * (rel_gamma + rel_fwhm)
+                            else:
+                                eta_err = 0.01
+                                
                         except Exception:
-                            # Fallback error estimation (e.g. 5% relative error if calc fails)
-                            fwhm_err = popt[2] * 0.05
+                            fwhm_err = fwhm_total * 0.05
+                            center_err = 0.001
+                            eta_err = 0.05
                             
                         best_result = DoubletFitResult(
-                            center_ka1=popt[0],
+                            center_ka1=center_val,
                             center_ka2=center_ka2,
-                            amplitude_ka1=popt[1],
-                            amplitude_ka2=popt[1] * self.intensity_ratio,
-                            fwhm=popt[2],
-                            eta=popt[3],
+                            amplitude_ka1=amp_val,
+                            amplitude_ka2=amp_val * self.intensity_ratio,
+                            fwhm=fwhm_total,
+                            eta=eta_eff,
                             r_squared=r_sq,
                             success=True,
-                            message=f"Doublet fit converged (R²={r_sq:.4f}, η={popt[3]:.2f})",
+                            message=f"True Voigt fit converged (R²={r_sq:.4f})",
                             fitted_curve=fitted,
-                            fwhm_error=fwhm_err
+                            fwhm_error=fwhm_err,
+                            center_error=center_err,
+                            eta_error=eta_err,
+                            opt_result=result
                         )
             except Exception:
                 continue
@@ -381,7 +444,7 @@ class DoubletFitter:
         if best_result is not None:
             return best_result
         
-        # Fallback if all attempts failed
+        # Fallback
         return DoubletFitResult(
             center_ka1=initial_center,
             center_ka2=calculate_ka2_position(initial_center),
@@ -391,7 +454,7 @@ class DoubletFitter:
             eta=0.5,
             r_squared=0,
             success=False,
-            message="Multi-start optimization failed"
+            message="Multi-start True Voigt failed"
         )
 
 

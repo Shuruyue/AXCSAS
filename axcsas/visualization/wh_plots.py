@@ -13,6 +13,7 @@ import numpy as np
 from .style import (
     COLORBLIND_SAFE,
     apply_axcsas_style,
+    get_color_palette,
     save_figure,
 )
 from axcsas.core.constants import CU_KA1, SCHERRER_K
@@ -24,7 +25,7 @@ def plot_williamson_hall(
     fit_result: Optional[Dict[str, Any]] = None,
     hkl_labels: Optional[List[str]] = None,
     output_path: Optional[str] = None,
-    dpi: int = 2400,
+    dpi: int = 300,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (10, 7),
@@ -264,4 +265,101 @@ def plot_wh_residuals(
     if show:
         plt.show()
 
+    return fig
+
+
+def plot_strain_evolution(
+    data: List[Dict[str, Any]],
+    output_path: Optional[str] = None,
+    dpi: int = 1200,
+    format: str = "png",
+    show: bool = True,
+    figsize: Tuple[float, float] = (10, 8),
+) -> plt.Figure:
+    """Plot Microstrain evolution by concentration.
+    
+    X-axis: Annealing Time
+    Y-axis: Microstrain (dimensionless)
+    Grouped by Concentration.
+    """
+    apply_axcsas_style()
+    
+    # Get unique concentrations
+    concentrations = sorted(set(sample.get('concentration', 0) for sample in data))
+    
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # Colors/Markers for concentrations using new palette
+    colors = get_color_palette(len(concentrations))
+    markers = ['o', 's', '^', 'D', 'v', '<', '>']
+    linestyles = ['-', '--', '-.', ':']
+    
+    for i, conc in enumerate(concentrations):
+        x_values = []
+        y_values = []
+        y_errs = []
+        
+        for sample in data:
+            if sample.get('concentration', 0) == conc:
+                val = sample.get('microstrain')
+                # Filter out invalid or zero strain
+                if val is not None and not np.isnan(val) and val > 1e-10:
+                    x_values.append(sample.get('time', 0))
+                    y_values.append(val)
+                    y_errs.append(sample.get('strain_error', 0.0))
+        
+        if x_values:
+            # Sort
+            sorted_idx = np.argsort(x_values)
+            x_sorted = np.array(x_values)[sorted_idx]
+            y_sorted = np.array(y_values)[sorted_idx]
+            e_sorted = np.array(y_errs)[sorted_idx]
+            
+            color = colors[i % len(colors)]
+            marker = markers[i % len(markers)]
+            ls = linestyles[i % len(linestyles)]
+            
+            label = f"{conc} mL/1.5L"
+            
+            error_kw = dict(ecolor=color, elinewidth=1.5, capsize=4, alpha=0.6)
+            
+            ax.errorbar(x_sorted, y_sorted, yerr=e_sorted, fmt=marker, 
+                       color=color, label=label, markersize=8,
+                       markeredgecolor='black', markeredgewidth=0.5, **error_kw)
+            ax.plot(x_sorted, y_sorted, color=color, linestyle=ls, linewidth=2, alpha=0.7)
+
+    # Styling
+    ax.set_xlabel('Annealing Time (hours)', fontsize=14)
+    ax.set_ylabel('Microstrain (ε)', fontsize=14)
+    ax.set_title('Microstrain Evolution during Annealing', fontsize=16, fontweight='bold')
+    
+    # Scientific notation for strain
+    ax.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
+    
+    ax.legend(fontsize=12, loc='upper right')
+    ax.grid(True, alpha=0.3, linestyle=':')
+    
+    # Start Y from 0 if feasible
+    current_ymin, current_ymax = ax.get_ylim()
+    if current_ymin > 0:
+        ax.set_ylim(bottom=0)
+        
+    # Add Physical Limitation Footnote
+    LIMITATION_NOTE = (
+        "Note: Microstrain (ε) assumes isotropic model. For Cu, (200) strain may be overestimated ~3x due to elastic anisotropy (E_111 ≈ 3*E_200).\n"
+        "註：微應變採用各向同性模型。銅具強烈各向異性，(200) 應變可能被高估約 3 倍。"
+    )
+    # Using slightly higher position to avoid cutting off x-axis label
+    fig.text(0.5, 0.01, LIMITATION_NOTE, ha='center', va='bottom', 
+             fontsize=10, style='italic', color='#555555', 
+             bbox=dict(facecolor='#f0f0f0', alpha=0.5, edgecolor='none', pad=5))
+    
+    plt.tight_layout(rect=[0, 0.06, 1, 0.96]) # Adjust for footer
+    
+    if output_path:
+        save_figure(fig, output_path, dpi=dpi, format=format)
+        
+    if show:
+        plt.show()
+        
     return fig

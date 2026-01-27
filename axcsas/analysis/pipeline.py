@@ -21,6 +21,7 @@ import re
 
 from axcsas.core.constants import CU_KA1
 from axcsas.core.copper_crystal import CU_JCPDS_EXTENDED
+from axcsas.fitting.ka_doublet import DoubletFitter
 
 from axcsas.methods.scherrer import (
     ScherrerCalculator,
@@ -43,14 +44,16 @@ from axcsas.methods.defect_analysis import (
     AnnealingState,
     determine_annealing_state,
 )
+from axcsas.fitting.hkl_assignment import assign_hkl
+from axcsas.fitting.lm_optimizer import LMOptimizer
+from axcsas.fitting.pseudo_voigt import PseudoVoigt, PseudoVoigtParams
+
+# Import after to avoid circular dependency
 from axcsas.analysis.report_generator import (
     ComprehensiveResult,
     generate_comprehensive_report,
     generate_csv_summary,
 )
-from axcsas.fitting.hkl_assignment import assign_hkl
-from axcsas.fitting.lm_optimizer import LMOptimizer
-from axcsas.fitting.pseudo_voigt import PseudoVoigt, PseudoVoigtParams
 
 
 # =============================================================================
@@ -76,11 +79,21 @@ class AnalysisConfig:
     min_intensity: float = 100  # minimum counts
     
     # Instrumental broadening (Caglioti U, V, W) / 儀器展寬
-    # Typical empirical values for lab diffractometers
     # FWHM_inst² = U·tan²θ + V·tanθ + W
-    caglioti_u: float = 0.0
-    caglioti_v: float = 0.0
-    caglioti_w: float = 0.003  # → FWHM_inst = √0.003 ≈ 0.055°
+    # 
+    # Default values 默認值 (Empirical ranges for typical lab diffractometers):
+    #   High-end lab:     W ≈ 0.001-0.002  (FWHM ≈ 0.032-0.045°)
+    #   Standard lab:     W ≈ 0.002-0.005  (FWHM ≈ 0.045-0.071°)  ← Default
+    #   Aging equipment:  W ≈ 0.008-0.015  (FWHM ≈ 0.089-0.122°)
+    #
+    # ⚠️ IMPORTANT 重要: These are placeholder values for initial analysis.
+    # For publication-quality results, calibrate using LaB6 (NIST SRM 660c):
+    #   >>> axcsas calibrate data/lab6_standard.txt
+    # 
+    # Reference 參考: Caglioti et al. (1958). Nucl. Instrum. 3, 223-228.
+    caglioti_u: float = 0.0      # Default: 0 (typically -0.005 to +0.005)
+    caglioti_v: float = 0.0      # Default: 0 (typically -0.002 to +0.002)
+    caglioti_w: float = 0.003    # Default: standard lab (FWHM_inst ≈ 0.055°)
     
     # Cu peak positions from JCPDS 04-0836 / 銅峰位從 JCPDS 標準
     # Dynamically generated from CU_JCPDS constants
@@ -103,6 +116,7 @@ class PeakData:
     intensity: float
     fwhm: float
     area: float = 0.0
+    eta: float = 0.5  # Pseudo-Voigt mixing parameter (0=Gaussian, 1=Lorentzian)
 
 
 @dataclass
@@ -301,21 +315,21 @@ def find_peak_in_range(
     two_theta: np.ndarray,
     intensity: np.ndarray,
     center: float,
-    window: float = 2.0,
-    use_pv_fitting: bool = True
+    window: float = 2.5,
+    use_doublet_fitting: bool = True
 ) -> Optional[PeakData]:
     """
-    Find peak near expected position using Pseudo-Voigt fitting.
+    Find peak near expected position using Kα doublet fitting.
     
     Args:
         two_theta: 2θ array
         intensity: Intensity array
         center: Expected peak center position
         window: Search window (degrees)
-        use_pv_fitting: If True, use Pseudo-Voigt fitting
+        use_doublet_fitting: If True, use DoubletFitter (recommended)
         
     Returns:
-        PeakData with fitted parameters, or None if no peak found
+        PeakData with fitted parameters (Kα₁ only), or None if no peak found
     """
     # Select range
     mask = (two_theta >= center - window) & (two_theta <= center + window)
@@ -336,19 +350,58 @@ def find_peak_in_range(
     # Estimate initial FWHM
     initial_fwhm = _estimate_fwhm_simple(theta_range, int_range, idx_max, peak_int)
     
-    # Try Pseudo-Voigt fitting
-    if use_pv_fitting:
-        success, peak_theta, peak_int, fwhm, eta, area = _fit_peak_pseudo_voigt(
-            theta_range, int_range, peak_theta, peak_int, initial_fwhm
-        )
-        if success:
-            return PeakData(hkl=(0, 0, 0), two_theta=peak_theta, intensity=peak_int, fwhm=fwhm, area=area)
+    # Try Kα doublet fitting using unified function
+    if use_doublet_fitting:
+        try:
+            from axcsas.fitting.peak_fitter import fit_peak_with_diagnosis
+            fit_result = fit_peak_with_diagnosis(
+                two_theta, intensity, center, window=2.5, use_doublet=True
+            )
+            
+            if fit_result['success'] and fit_result.get('r_squared', 0) > 0.8:
+                from axcsas.fitting.pv_area import calculate_pv_area
+                area = calculate_pv_area(
+                     fit_result['amplitude'],
+                     fit_result['fwhm'],
+                     fit_result.get('eta', 0.5)
+                )
+                return PeakData(
+                    hkl=(0, 0, 0),
+                    two_theta=fit_result['center'],
+                    intensity=fit_result['amplitude'],
+                    fwhm=fit_result['fwhm'],
+                    area=area,
+                    eta=fit_result.get('eta', 0.5)
+                )
+        except Exception:
+            pass
     
-    # Fallback to simple method
+    # Fallback: simple Pseudo-Voigt fitting
+    success, peak_theta, peak_int, fwhm, eta, area = _fit_peak_pseudo_voigt(
+        theta_range, int_range, peak_theta, peak_int, initial_fwhm
+    )
+    if success:
+        return PeakData(
+            hkl=(0, 0, 0),
+            two_theta=peak_theta,
+            intensity=peak_int,
+            fwhm=fwhm,
+            area=area,
+            eta=eta
+        )
+    
+    # Final fallback: simple method
     fwhm = max(initial_fwhm, 0.05)
     area = _calculate_peak_area_simple(theta_range, int_range)
     
-    return PeakData(hkl=(0, 0, 0), two_theta=peak_theta, intensity=peak_int, fwhm=fwhm, area=area)
+    return PeakData(
+        hkl=(0, 0, 0),
+        two_theta=peak_theta,
+        intensity=peak_int,
+        fwhm=fwhm,
+        area=area,
+        eta=0.5 # Default to intermediate
+    )
 
 
 # =============================================================================
@@ -378,6 +431,77 @@ class AXCSASPipeline:
         self.texture = TextureAnalyzer()
         self.sf_analyzer = StackingFaultAnalyzer()
         self.lattice = LatticeMonitor()
+    
+    def _load_and_validate_data(self, filepath: str):
+        """Load XRD data and validate. Returns (two_theta, intensity, error_message)."""
+        try:
+            two_theta, intensity = load_bruker_txt(filepath)
+        except Exception as e:
+            return None, None, f"Error loading file: {e}"
+        
+        if len(two_theta) == 0:
+            return None, None, "No data found in file"
+        
+        return two_theta, intensity, ""
+    
+    def _find_peaks_from_data(self, two_theta, intensity):
+        """Find peaks in XRD data using expected peak positions."""
+        peaks = []
+        for hkl, expected_pos in self.config.EXPECTED_PEAKS.items():
+            peak = find_peak_in_range(
+                two_theta, intensity, expected_pos, self.config.peak_window
+            )
+            if peak:
+                peak.hkl = hkl
+                peaks.append(peak)
+        return peaks
+    
+    def _run_scherrer_analysis(self, peaks):
+        """Run Scherrer analysis on all peaks. Returns (results, average_size)."""
+        scherrer_results = []
+        for peak in peaks:
+            result = self.scherrer.calculate(
+                two_theta=peak.two_theta,
+                fwhm_observed=peak.fwhm,
+                fwhm_instrumental=np.sqrt(self.config.caglioti_w),
+                hkl=peak.hkl,
+                eta_observed=peak.eta,
+                eta_instrumental=0.0  # Assume Gaussian instrument (Caglioti standard)
+            )
+            scherrer_results.append(result)
+        
+        # Calculate average
+        valid_sizes = [
+            r.size_nm for r in scherrer_results
+            if r.validity_flag != ValidityFlag.UNRELIABLE
+        ]
+        avg_size = np.mean(valid_sizes) if valid_sizes else None
+        return scherrer_results, avg_size
+    
+    def _run_defect_analysis(self, peaks):
+        """Run defect and lattice analysis. Returns (stacking_fault, lattice)."""
+        # Stacking fault
+        peak_111 = next((p for p in peaks if p.hkl == (1, 1, 1)), None)
+        peak_200 = next((p for p in peaks if p.hkl == (2, 0, 0)), None)
+        sf_result = None
+        
+        if peak_111 and peak_200:
+            sf_result = self.sf_analyzer.analyze(
+                peak_111.two_theta, peak_200.two_theta
+            )
+        
+        # Lattice constant (prefer high-angle peaks)
+        high_angle_peak = next(
+            (p for p in peaks if p.hkl in [(3, 1, 1), (2, 2, 0)]),
+            peaks[-1] if peaks else None
+        )
+        lattice_result = None
+        if high_angle_peak:
+            lattice_result = self.lattice.analyze_lattice(
+                high_angle_peak.two_theta, high_angle_peak.hkl
+            )
+        
+        return sf_result, lattice_result
     
     def analyze(
         self,

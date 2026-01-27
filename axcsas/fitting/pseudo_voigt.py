@@ -53,11 +53,42 @@ class TrueVoigt:
     """
     True Voigt profile function (convolution of Gaussian and Lorentzian).
     
+    Mathematical Definition (Faddeeva Function):
+    --------------------------------------------
     V(x; σ, γ) = Re[w(z)] / (σ√(2π))
     
-    where w(z) is the Faddeeva function and z = (x + iγ) / (σ√2)
+    where w(z) is the Faddeeva function (scaled complex error function):
+        w(z) = exp(-z²) * erfc(-iz)
+        
+    and z is the complex argument:
+        z = (x + iγ) / (σ√2)
+        
+    Physical Interpretation in XRD:
+    -------------------------------
+    - x (Real part): Deviation from Bragg angle (2θ - 2θ₀).
+      Analogous to "Frequency Drift" in spectroscopy.
+    - γ (Imaginary part): Lorentzian HWHM (Size Broadening + Lifetime).
+      Analogous to "Damping Coefficient" in spectroscopy.
+    - σ (Normalization): Gaussian Width (Strain + Instrument).
     
-    This is more physically accurate than Pseudo-Voigt for XRD peaks.
+    Note on Instrument Parameters:
+    ------------------------------
+    This function fits the *Total* profile (Sample ⊗ Instrument).
+    You do NOT need instrument parameters to perform this fit. The optimizer
+    will find the effective σ_total and γ_total from the raw data.
+    Instrumental correction is performed *after* fitting during the
+    analysis stage (e.g., in Williamson-Hall or Scherrer methods).
+    
+    References:
+    -----------
+    1. Armstrong, B. H. (1967). 
+       "Spectrum Line Profiles: The Voigt Function". 
+       J. Quant. Spectrosc. Radiat. Transfer, 7, 61-88.
+       
+    2. Poppe, G. P. M., & Wijers, C. M. J. (1990).
+       "More efficient computation of the complex error function".
+       ACM Trans. Math. Softw., 16, 38-46.
+       (Standard algorithm used by scipy.special.wofz)
     """
     
     @staticmethod

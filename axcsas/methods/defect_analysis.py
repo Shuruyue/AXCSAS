@@ -422,9 +422,35 @@ class LatticeMonitor:
         
         # 使用方向相依泊松比 / Use direction-dependent Poisson ratio
         poisson = get_poisson_ratio(*hkl, use_directional=True)
-        stress_mpa = E_mpa / (1 + poisson) * delta_d_ratio
+        
+        # ═══════════════════════════════════════════════════════════════════════════
+        # Residual Stress Calculation / 殘留應力計算
+        # ═══════════════════════════════════════════════════════════════════════════
+        # Physical Model: Equi-biaxial Stress State (Standard for thin films)
+        # 物理模型：等雙軸應力狀態 (薄膜標準模型)
+        # Assumptions:
+        #   1. σx = σy = σ (In-plane stress is isotropic)
+        #   2. σz = 0 (Surface normal stress is zero, plane stress condition)
+        #
+        # Hooke's Law derivation:
+        #   εz = (1/E) * [σz - ν(σx + σy)]
+        #   εz = (1/E) * [0 - ν(2σ)]
+        #   εz = -(2ν/E) * σ
+        #
+        # Solved for σ:
+        #   σ = -E / (2ν) * εz
+        #
+        # Notes:
+        #   - εz = (d - d0) / d0 (measured lattice strain)
+        #   - Negative sign is crucial: Expansion (εz > 0) means In-plane Compression (σ < 0)
+        # ═══════════════════════════════════════════════════════════════════════════
+        if poisson == 0:
+            stress_mpa = 0.0
+        else:
+            stress_mpa = -E_mpa / (2 * poisson) * delta_d_ratio
         
         # Determine stress type
+        # Positive σ = Tensile (拉伸), Negative σ = Compressive (壓縮)
         if stress_mpa > 10:
             stress_type = StressType.TENSILE
             message = f"拉伸應力 {stress_mpa:.0f} MPa"

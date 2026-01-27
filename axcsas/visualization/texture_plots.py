@@ -21,7 +21,7 @@ from .style import (
 def plot_texture_polar(
     tc_values: Dict[str, float],
     output_path: Optional[str] = None,
-    dpi: int = 2400,
+    dpi: int = 300,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (8, 8),
@@ -129,6 +129,7 @@ def plot_tc_evolution(
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (15, 5.5),
+    normalize: bool = False,  # NEW: If True, plot as fraction (sum=1)
 ) -> plt.Figure:
     """Plot TC evolution across samples with subplots by peak direction.
     繪製 TC 隨樣品參數演化圖（按峰方向分子圖）。
@@ -147,6 +148,9 @@ def plot_tc_evolution(
         format: Output format.
         show: Whether to display figure.
         figsize: Figure size.
+        normalize: If True, convert TC to fraction (f = TC/3, sum=1).
+                   If False, plot as standard TC (sum=3).
+        
         
     Returns:
         Matplotlib Figure object.
@@ -182,6 +186,19 @@ def plot_tc_evolution(
     concentrations = sorted(set(sample.get('concentration', 0) for sample in data))
     colors = get_color_palette(len(concentrations))
     conc_color_map = dict(zip(concentrations, colors))
+    
+    # Different line styles and markers for different concentrations
+    line_styles_list = ['-', '--', '-.', ':']
+    markers_list = ['o', 's', '^', 'D']
+    
+    conc_linestyle_map = {
+        conc: line_styles_list[i % len(line_styles_list)]
+        for i, conc in enumerate(concentrations)
+    }
+    conc_marker_map = {
+        conc: markers_list[i % len(markers_list)]
+        for i, conc in enumerate(concentrations)
+    }
 
     # Plot each hkl in its own subplot
     for idx, hkl in enumerate(hkl_list):
@@ -196,7 +213,9 @@ def plot_tc_evolution(
             x_val = sample.get(x_param, 0)
             tc_dict = sample.get('tc_values', {})
             if hkl in tc_dict:
-                ax.scatter(x_val, tc_dict[hkl], 
+                # Normalize to fraction if requested
+                tc_val = tc_dict[hkl] / 3.0 if normalize else tc_dict[hkl]
+                ax.scatter(x_val, tc_val, 
                           c='gray', s=60, alpha=0.5, zorder=1,
                           marker='o', edgecolors='none')
         
@@ -212,7 +231,9 @@ def plot_tc_evolution(
                 tc_dict = sample.get('tc_values', {})
                 if hkl in tc_dict:
                     x_values.append(x_val)
-                    tc_values.append(tc_dict[hkl])
+                    # Normalize to fraction if requested
+                    tc_val = tc_dict[hkl] / 3.0 if normalize else tc_dict[hkl]
+                    tc_values.append(tc_val)
             
             if x_values:
                 # Sort by x-value
@@ -221,27 +242,48 @@ def plot_tc_evolution(
                 tc_sorted = np.array(tc_values)[sorted_indices]
                 
                 color = conc_color_map[conc]
+                linestyle = conc_linestyle_map[conc]
+                marker = conc_marker_map[conc]
                 label = f'{conc} mL/1.5L'
                 
-                ax.plot(x_sorted, tc_sorted, 'o-', color=color,
-                       linewidth=2, markersize=8, 
-                       markeredgecolor='black', markeredgewidth=0.5,
-                       label=label, zorder=2)
+                ax.plot(x_sorted, tc_sorted, 
+                       linestyle=linestyle,
+                       marker=marker,
+                       color=color,
+                       linewidth=2, 
+                       markersize=7,
+                       markeredgecolor='black', 
+                       markeredgewidth=0.5,
+                       label=label, 
+                       zorder=2,
+                       alpha=0.9)
         
         # Add legend entry for gray points if any exist
         if low_quality_data:
             ax.scatter([], [], c='gray', s=60, alpha=0.5, 
-                      marker='o', label='R² < 0.995 (low quality)')
+                      marker='o', label='R² < 0.95 (low quality)')
         
-        # Random orientation reference
-        ax.axhline(y=1.0, color='red', linestyle='--', linewidth=2, alpha=0.7)
+        # Random orientation reference and zone (adjusted for normalization)
+        if normalize:
+            # For fraction: random = 1/3 ≈ 0.333
+            random_ref = 1.0 / 3.0
+            random_min = 0.9 / 3.0
+            random_max = 1.1 / 3.0
+            y_label = 'Texture Fraction (f)'
+        else:
+            # For standard TC: random = 1.0
+            random_ref = 1.0
+            random_min = 0.9
+            random_max = 1.1
+            y_label = 'Texture Coefficient (TC)'
         
-        # Random zone (0.9-1.1)
-        ax.axhspan(0.9, 1.1, alpha=0.1, color='green', label='Random zone')
+        if not normalize:
+             ax.axhline(y=random_ref, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Random')
+        # ax.axhspan(random_min, random_max, alpha=0.15, color='gray', label='Random zone') # Removed per user request
         
         ax.set_xlabel(x_label)
-        ax.set_ylabel('Texture Coefficient (TC)')
-        ax.set_title(f'{hkl} Peak', fontsize=12, fontweight='bold')
+        ax.set_ylabel(y_label)
+        ax.set_title(f'{hkl} Peak', fontweight='bold', fontsize=13)
         ax.legend(loc='best', fontsize=8)
         ax.grid(True, alpha=0.3)
         ax.set_box_aspect(1)
@@ -257,8 +299,18 @@ def plot_tc_evolution(
         all_tc.extend(tc_dict.values())
     
     if all_tc:
-        y_min = min(0.5, min(all_tc) * 0.9)
-        y_max = max(1.5, max(all_tc) * 1.1)
+        if normalize:
+            # Scale raw TC values to fraction for limit calculation
+            all_vals = [v / 3.0 for v in all_tc]
+            # Fraction limits: 0 to 1.0 (fixed)
+            y_min = 0.0
+            y_max = 1.0
+        else:
+            all_vals = all_tc
+            # TC limits: auto-range with reasonable defaults
+            y_min = min(0.5, min(all_vals) * 0.9)
+            y_max = max(1.5, max(all_vals) * 1.1)
+            
         for ax in axes[:len(hkl_list)]:
             ax.set_ylim(y_min, y_max)
 
@@ -272,3 +324,155 @@ def plot_tc_evolution(
         plt.show()
 
     return fig
+
+
+def plot_texture_fraction_single(
+    data: List[Dict[str, Any]],
+    x_param: str = "time",
+    output_path: Optional[str] = None,
+    dpi: int = 1200,
+    format: str = "png",
+    show: bool = True,
+    figsize: Tuple[float, float] = (14, 11),
+    metric: str = "fraction",  # "fraction" or "tc"
+) -> plt.Figure:
+    """Plot texture metrics with 2x2 grid (one panel per concentration).
+    
+    Args:
+        metric: "fraction" (f=TC/N) or "tc" (raw TC values)
+    """
+    apply_axcsas_style()
+    
+    # Separate high and low quality data
+    high_quality_data = [s for s in data if s.get('high_quality', True)]
+    
+    # Get all concentrations and hkl values
+    concentrations = sorted(set(s.get('concentration', 0) for s in high_quality_data))
+    all_hkls = sorted(set(
+        hkl for s in high_quality_data for hkl in s.get('tc_values', {}).keys()
+    ))
+    n_peaks = len(all_hkls) if all_hkls else 3
+    
+    # Create 2x2 subplot grid
+    # Adjust rows/cols based on number of concentrations
+    n_conc = len(concentrations)
+    n_cols = 2
+    n_rows = (n_conc + 1) // 2
+    
+    # Resize figure if we have more rows
+    if n_rows > 2:
+        figsize = (figsize[0], figsize[1] * (n_rows/2))
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+    axes = axes.flatten()
+    
+    # Colors for different peaks
+    peak_colors = get_color_palette(len(all_hkls))
+    hkl_colors = dict(zip(all_hkls, peak_colors))
+    
+    # Line styles
+    line_styles = ['-', '--', '-.', ':']
+    markers = ['o', 's', '^', 'D', 'v']
+    
+    hkl_styles = {hkl: line_styles[i % len(line_styles)] for i, hkl in enumerate(all_hkls)}
+    hkl_markers = {hkl: markers[i % len(markers)] for i, hkl in enumerate(all_hkls)}
+    
+    # Pre-calculate global max for TC metric
+    global_max_tc = 1.6  # Default fallback
+    if metric == "tc":
+        all_tc_vals = [v for s in high_quality_data for v in s.get('tc_values', {}).values()]
+        if all_tc_vals:
+             global_max_tc = max(max(all_tc_vals) * 1.15, 1.6) # Ensure at least 1.6 if data is high
+
+    # Plot each concentration in its own panel
+    for idx, conc in enumerate(concentrations):
+        ax = axes[idx]
+        
+        # Plot each peak for this concentration
+        for hkl in all_hkls:
+            x_values = []
+            y_values = []
+            
+            # Collect data for this conc-hkl pair
+            for sample in high_quality_data:
+                if sample.get('concentration', 0) != conc:
+                    continue
+                x_val = sample.get(x_param, 0)
+                tc_dict = sample.get('tc_values', {})
+                if hkl in tc_dict:
+                    x_values.append(x_val)
+                    tc_val = tc_dict[hkl]
+                    
+                    if metric == "fraction":
+                        y_values.append(tc_val / n_peaks)
+                    else:
+                        y_values.append(tc_val)
+            
+            if x_values:
+                # Sort by x
+                sorted_idx = np.argsort(x_values)
+                x_sorted = np.array(x_values)[sorted_idx]
+                y_sorted = np.array(y_values)[sorted_idx]
+                
+                color = hkl_colors.get(hkl, 'gray')
+                linestyle = hkl_styles.get(hkl, '-')
+                marker = hkl_markers.get(hkl, 'o')
+                
+                ax.plot(x_sorted, y_sorted, 
+                       linestyle=linestyle,
+                       marker=marker,
+                       color=color,
+                       linewidth=2,
+                       markersize=8,
+                       markeredgecolor='black',
+                       markeredgewidth=0.5,
+                       label=hkl,
+                       alpha=0.85)
+        
+        # Labels and formatting
+        x_label = 'Annealing Time (hours)' if x_param == 'time' else 'Concentration (mL/1.5L)'
+        
+        if metric == "fraction":
+            y_label_text = 'Texture Fraction (f)'
+            title_suffix = '(Fraction)'
+            # Y limit for fraction (0-1)
+            ax.set_ylim(0, 1.0)
+            # Reference lines for random fraction
+            # random_f = 1.0 / n_peaks
+            # ax.axhline(random_f, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Random')
+        else:
+            y_label_text = 'Texture Coefficient (TC)'
+            title_suffix = '(TC Value)'
+            # Y limit for TC (0-max)
+            ax.set_ylim(0, global_max_tc)
+            # Reference line for TC=1
+            ax.axhline(1.0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Random (TC=1)')
+
+        ax.set_xlabel(x_label, fontsize=12)
+        ax.set_ylabel(y_label_text, fontsize=12)
+        ax.set_title(f'{conc} mL/1.5L', fontsize=13, fontweight='bold')
+        
+        # Legend
+        ax.legend(loc='upper right', fontsize=9, framealpha=0.9, ncol=2)
+        ax.grid(True, alpha=0.3)
+        
+    # Hide unused subplots
+    for idx in range(len(concentrations), len(axes)):
+        axes[idx].set_visible(False)
+    
+    title_metric = "Texture Fraction" if metric == "fraction" else "Texture Coefficient"
+    fig.suptitle(f'{title_metric} Comparison by Concentration', 
+                 fontsize=16, fontweight='bold', y=0.995)
+    plt.tight_layout()
+    
+    if output_path:
+        save_figure(fig, output_path, dpi=dpi, format=format)
+    
+    if show:
+        plt.show()
+    
+    return fig
+    
+
+
+

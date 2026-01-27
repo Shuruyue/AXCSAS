@@ -153,7 +153,7 @@ def _run_analyze(args) -> int:
     執行分析指令。
     """
     from axcsas.core.config_loader import load_config
-    from axcsas.analysis.pipeline import AnalysisPipeline
+    from axcsas.analysis.pipeline import AXCSASPipeline
     
     print(f"Loading configuration... 載入配置...")
     config = load_config(args.config)
@@ -164,7 +164,7 @@ def _run_analyze(args) -> int:
     # Ensure output directory exists
     args.output.mkdir(parents=True, exist_ok=True)
     
-    pipeline = AnalysisPipeline(config)
+    pipeline = AXCSASPipeline(config)
     
     if args.batch or args.input.is_dir():
         # Batch processing

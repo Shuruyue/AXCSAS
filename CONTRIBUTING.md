@@ -24,7 +24,7 @@ Be respectful, constructive, and professional in all interactions.
 ## Getting Started
 
 **Prerequisites**:
-- Python ≥ 3.8
+- Python ≥ 3.9
 - Git
 - Basic knowledge of XRD analysis
 

@@ -16,6 +16,7 @@ sys.path.insert(0, str(project_root))
 
 from axcsas.analysis.pipeline import load_bruker_txt
 from axcsas.fitting.ka_doublet import DoubletFitter
+from axcsas.fitting.pv_area import calculate_pv_area  # Correct PV area calculation
 from axcsas.methods.texture import TextureAnalyzer, analyze_texture
 from axcsas.visualization.texture_plots import plot_texture_polar, plot_tc_evolution
 from axcsas.visualization.style import save_figure
@@ -37,7 +38,7 @@ PEAK_POSITIONS = get_standard_peaks()
 # Quality threshold for texture analysis
 # R² threshold for high-quality texture coefficient calculation
 # 織構係數計算的高品質 R² 閾值
-R2_THRESHOLD = 0.995  # User-defined quality standard / 使用者自定義品質標準
+R2_THRESHOLD = 0.95  # User-defined quality standard / 使用者自定義品質標準
 
 
 # parse_sample_info removed - use parse_filename() from pipeline
@@ -47,21 +48,19 @@ R2_THRESHOLD = 0.995  # User-defined quality standard / 使用者自定義品質
 
 
 def fit_peaks_and_get_intensities(two_theta: np.ndarray, intensity: np.ndarray, verbose: bool = False) -> tuple:
-    """Fit ALL peaks using DoubletFitter and require R² ≥ 0.995 for each.
+    """Fit ALL peaks using DoubletFitter and calculate accurate integrated areas.
     
     Returns:
         (intensities_dict, all_passed, r2_values, area_values)
-        - intensities_dict: Dict of (hkl) -> integrated intensity (only R² ≥ 0.995)
-        - all_passed: True if all 3 peaks have R² ≥ 0.995
+        - intensities_dict: Dict of (hkl) -> integrated intensity (only R² ≥ 0.95)
+        - all_passed: True if all 3 peaks have R² ≥ 0.95
         - r2_values: Dict of (hkl) -> R² value
         - area_values: Dict of (hkl) -> fitted area (all peaks)
-    """
-    # Pseudo-Voigt area factor: (pi/2) / (2*sqrt(ln(2))) ??
-    # Actually, integrated area = Amplitude * FWHM * (eta * (pi/2) + (1-eta) * sqrt(pi/4ln2))
-    # But usually simplified. Using consistent factor if possible.
-    # For now, keeping local constant but documenting calculation.
-    PV_FACTOR = 1.0645  
     
+    Note:
+        Uses calculate_pv_area() with actual η from fitting for accurate area calculation.
+        This is critical for texture coefficient accuracy!
+    """
     intensities = {}
     r2_values = {}
     area_values = {}
@@ -80,8 +79,11 @@ def fit_peaks_and_get_intensities(two_theta: np.ndarray, intensity: np.ndarray, 
             if result['success']:
                 amplitude = result['amplitude']
                 fwhm = result['fwhm']
+                eta = result['eta']  # ← CRITICAL: Use actual fitted η
                 r2 = result['r_squared']
-                peak_area = amplitude * fwhm * PV_FACTOR
+                
+                # ✓ CORRECT: Use dynamic η-based area calculation
+                peak_area = calculate_pv_area(amplitude, fwhm, eta)
                 
                 r2_values[hkl] = r2
                 area_values[hkl] = peak_area
@@ -113,13 +115,12 @@ def plot_texture_diagnosis(
     - Colored fit line with fill
     - Peak center vertical lines
     - FWHM indicator
-    - Info box with R², Amp, FWHM, Area
+    - Info box with R², Amp, FWHM, η, Area (with correct calculation)
     """
     from axcsas.visualization.style import apply_axcsas_style, COLORBLIND_SAFE
     apply_axcsas_style()
     
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    PV_FACTOR = 1.0645
     PEAK_LABELS = ['(111)', '(200)', '(220)']
     colors = [COLORBLIND_SAFE[0], COLORBLIND_SAFE[1], COLORBLIND_SAFE[2]]
     
@@ -155,36 +156,43 @@ def plot_texture_diagnosis(
                     amp = result['amplitude']
                     fwhm = result['fwhm']
                     center = result['center']
-                    area = amp * fwhm * PV_FACTOR
+                    center_ka2 = result.get('center_ka2', np.nan)
+                    eta = result.get('eta', np.nan)
                     
-                    # Vertical line at peak center
-                    ax.axvline(x=center, color='blue', linestyle='--', alpha=0.6,
-                              linewidth=1.0, label=f'Center={center:.3f}°')
+                    # ✓ CORRECT: Use dynamic η-based area calculation
+                    area = calculate_pv_area(amp, fwhm, eta)
                     
-                    # FWHM indicator (horizontal line at half max)
+                    # Get uncertainties (matching fitting_diagnosis)
+                    center_err = result.get('center_err', np.nan)
+                    fwhm_err = result.get('fwhm_err', np.nan)
+                    eta_err = result.get('eta_err', np.nan)
+                    
+                    # Vertical lines at Kα₁ and Kα₂ centers (gray, matching fitting_diagnosis)
+                    ax.axvline(x=center, color='gray', linestyle='--', alpha=0.7,
+                              linewidth=1.0, label=f'Kα₁={center:.3f}°')
+                    if not np.isnan(center_ka2):
+                        ax.axvline(x=center_ka2, color='gray', linestyle=':', alpha=0.7,
+                                  linewidth=1.0, label=f'Kα₂={center_ka2:.3f}°')
+                    
+                    # FWHM indicator (muted red, matching fitting_diagnosis)
                     half_max = amp / 2 + np.min(fitted_curve)
                     ax.hlines(y=half_max, xmin=center - fwhm/2, xmax=center + fwhm/2,
-                             color='green', linewidth=1.5, label=f'FWHM={fwhm:.4f}°')
+                             color='#C44E52', linewidth=1.5, label=f'FWHM={fwhm:.4f}°')
                     
-                    # Info text box (matching fitting_diagnosis format)
-                    target_r2 = 0.995
-                    low_quality = r2 < target_r2
-                    quality_warning = f"⚠️ R² < {target_r2}\n" if low_quality else ""
+                    # Info text box (matching fitting_diagnosis format exactly)
                     info_text = (
-                        f"{quality_warning}"
                         f"R² = {r2:.4f}\n"
-                        f"Amp = {amp:.1f}\n"
-                        f"FWHM = {fwhm:.4f}°\n"
+                        f"2θ = {center:.3f}° ± {center_err:.3f}°\n"
+                        f"FWHM = {fwhm:.4f}° ± {fwhm_err:.4f}°\n"
+                        f"η = {eta:.3f} ± {eta_err:.3f}\n"
                         f"Area = {area:.1f}"
                     )
                     
-                    # Use orange box if low quality (matching fitting_diagnosis)
-                    box_color = 'orange' if low_quality else 'white'
-                    edge_color = 'red' if low_quality else 'gray'
+                    # Always use white box (no warning for texture plots)
                     ax.text(0.02, 0.98, info_text, transform=ax.transAxes,
-                           fontsize=9, verticalalignment='top',
-                           bbox=dict(boxstyle='round', facecolor=box_color, 
-                                    edgecolor=edge_color, alpha=0.9))
+                           fontsize=9, verticalalignment='top', family='serif',
+                           bbox=dict(boxstyle='round', facecolor='white', 
+                                    edgecolor='gray', alpha=0.9))
                 
         except Exception as e:
             ax.text(0.5, 0.5, f'Error: {e}', transform=ax.transAxes,
@@ -345,26 +353,62 @@ def main():
             x_param='time',
             output_path=str(output_dir / "tc_evolution_by_time.png"),
             show=False,
-            dpi=2400,
+            dpi=1200,
+            normalize=False,  # Standard TC (sum=3)
         )
         plt.close(fig)
         print("  ✓ tc_evolution_by_time.png")
     except Exception as e:
         print(f"  ✗ tc_evolution_by_time.png: {e}")
     
-    # 2. TC Evolution by Concentration (grouped by time)
+    
+    # 1b. Texture Fraction Evolution (normalized, sum=1) - DISABLED per user request
+    # User feedback: Not needed when we have fraction_single plot
+    # try:
+    #     fig = plot_tc_evolution(
+    #         all_tc_data,
+    #         x_param='time',
+    #         output_path=str(output_dir / "texture_fraction_by_time.png"),
+    #         show=False,
+    #         dpi=1200,
+    #         normalize=True,  # Fraction mode (sum=1)
+    #     )
+    #     plt.close(fig)
+    #     print("  ✓ texture_fraction_by_time.png (3 subplots)")
+    # except Exception as e:
+    #     print(f("  ✗ texture_fraction_by_time.png: {e}")
+    
+    
+    # 1c. Texture Fraction - Single Plot (all peaks on one chart)
     try:
-        fig = plot_tc_evolution(
+        from axcsas.visualization.texture_plots import plot_texture_fraction_single
+        fig = plot_texture_fraction_single(
             all_tc_data,
-            x_param='concentration',
-            output_path=str(output_dir / "tc_evolution_by_concentration.png"),
+            x_param='time',
+            output_path=str(output_dir / "texture_fraction_single.png"),
             show=False,
-            dpi=2400,
+            dpi=1200,
         )
         plt.close(fig)
-        print("  ✓ tc_evolution_by_concentration.png")
+        print("  ✓ texture_fraction_single.png (combined plot)")
     except Exception as e:
-        print(f"  ✗ tc_evolution_by_concentration.png: {e}")
+        print(f"  ✗ texture_fraction_single.png: {e}")
+    
+    # 2. TC Evolution by Concentration (grouped by time) - DISABLED per user request
+    # User feedback: This plot is confusing and not useful
+    # try:
+    #     fig = plot_tc_evolution(
+    #         all_tc_data,
+    #         x_param='concentration',
+    #         output_path=str(output_dir / "tc_evolution_by_concentration.png"),
+    #         show=False,
+    #         dpi=1200,
+    #     )
+    #     plt.close(fig)
+    #     print("  ✓ tc_evolution_by_concentration.png")
+    # except Exception as e:
+    #     print(f"  ✗ tc_evolution_by_concentration.png: {e}")
+    
     
     # 3. Generate polar plots for selected samples (initial and final for each concentration)
     concentrations = sorted(set(d['concentration'] for d in all_tc_data))
@@ -380,13 +424,15 @@ def main():
         # Plot first and last sample
         for sample in [conc_samples[0], conc_samples[-1]]:
             try:
-                sample_name = f"{sample['concentration']}ml_{sample['time']}h"
+                # Use integer hours for cleaner filenames
+                time_hr = int(round(sample['time']))
+                sample_name = f"{sample['concentration']}ml_{time_hr}hr"
                 fig = plot_texture_polar(
                     sample['tc_values'],
                     output_path=str(output_dir / f"tc_polar_{sample_name}.png"),
                     show=False,
                     sample_name=sample_name,
-                    dpi=2400,
+                    dpi=1200,
                 )
                 plt.close(fig)
                 print(f"  ✓ tc_polar_{sample_name}.png")

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import re
 
 from axcsas.methods.scherrer import ValidityFlag, calculate_scherrer
-from axcsas.analysis.pipeline import AXCSASPipeline, AnalysisConfig, PipelineResult
+from axcsas.analysis.pipeline import AXCSASPipeline, AnalysisConfig, PipelineResult, parse_filename, load_bruker_txt
 
 # Import new visualization module
 from axcsas.visualization.style import (
@@ -232,6 +232,7 @@ def generate_fwhm_plots(samples: List[SampleData], output_dir: Path) -> int:
             x_param='time',
             output_path=str(output_dir / 'fwhm_evolution_by_time.png'),
             show=False,
+            dpi=1200,
             instrument_limit=0.05  # degrees, user-defined or from Caglioti fit
                                     # 使用者自定義或從 Caglioti 擬合計算
         )
@@ -246,6 +247,7 @@ def generate_fwhm_plots(samples: List[SampleData], output_dir: Path) -> int:
             plot_data,
             output_path=str(output_dir / 'fwhm_by_concentration.png'),
             show=False,
+            dpi=1200,
             instrument_limit=0.05  # degrees, user-defined or from Caglioti fit
         )
         count += 1
@@ -275,6 +277,7 @@ def generate_scherrer_plots(samples: List[SampleData], output_dir: Path) -> int:
             plot_data,
             output_path=str(output_dir / 'scherrer_size_by_direction.png'),
             show=False,
+            dpi=1200,
         )
         count += 1
         print(f"  ✓ scherrer_size_by_direction.png")
@@ -287,6 +290,7 @@ def generate_scherrer_plots(samples: List[SampleData], output_dir: Path) -> int:
             plot_data,
             output_path=str(output_dir / 'scherrer_size_by_concentration.png'),
             show=False,
+            dpi=1200,
         )
         count += 1
         print(f"  ✓ scherrer_size_by_concentration.png")

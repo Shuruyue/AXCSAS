@@ -21,7 +21,7 @@ def plot_scherrer_evolution_by_peak(
     data: List[Dict[str, Any]],
     x_param: str = "time",
     output_path: Optional[str] = None,
-    dpi: int = 2400,
+    dpi: int = 1200,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (12, 8),
@@ -68,6 +68,19 @@ def plot_scherrer_evolution_by_peak(
     group_color_map = dict(zip(group_values, colors_by_group))
     label_format = lambda g: f'{g} mL/1.5L'
     
+    # Different line styles and markers for different concentrations
+    line_styles_list = ['-', '--', '-.', ':']
+    markers_list = ['o', 's', '^', 'D']
+    
+    group_linestyle_map = {
+        g: line_styles_list[i % len(line_styles_list)]
+        for i, g in enumerate(group_values)
+    }
+    group_marker_map = {
+        g: markers_list[i % len(markers_list)]
+        for i, g in enumerate(group_values)
+    }
+    
     # Plot each hkl
     for idx, hkl in enumerate(hkl_list):
         ax = axes[idx]
@@ -90,6 +103,8 @@ def plot_scherrer_evolution_by_peak(
             
             if x_values:
                 color = group_color_map[group_val]
+                linestyle = group_linestyle_map[group_val]
+                marker = group_marker_map[group_val]
                 # Sort by x-value
                 sorted_indices = np.argsort(x_values)
                 x_sorted = np.array(x_values)[sorted_indices]
@@ -108,14 +123,15 @@ def plot_scherrer_evolution_by_peak(
                     e_sorted = np.array(y_errs)[sorted_indices]
                     
                     label = label_format(group_val)
-                    ax.errorbar(x_sorted, y_sorted, yerr=e_sorted, fmt='o', c=color, markersize=8,
+                    ax.errorbar(x_sorted, y_sorted, yerr=e_sorted, fmt=marker, c=color, markersize=7,
                                 ecolor=color, elinewidth=1.5, capsize=4, alpha=0.8,
                                 markeredgecolor='black', markeredgewidth=0.5, label=label)
-                    ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle='-', linewidth=2.0)
+                    ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle=linestyle, linewidth=2.0)
 
         ax.set_xlabel(x_label)
         ax.set_ylabel('Crystallite Size (nm)')
-        ax.set_title(f'{hkl} Peak')
+        hkl_label = f"({hkl[0]}{hkl[1]}{hkl[2]})"
+        ax.set_title(f'{hkl_label} Peak')
         
         # Instrument limit visualization
         # 1. Solid red for >300 nm (fully unreliable - beyond instrument resolution)
@@ -127,7 +143,7 @@ def plot_scherrer_evolution_by_peak(
         
         ax.legend(loc='upper right', fontsize=8, ncol=2)
         ax.set_box_aspect(1)  # Make subplot square
-        ax.grid(True, alpha=0.3)
+        ax.grid(True, alpha=0.3, linestyle=':')
 
     # Hide unused axes
     for idx in range(len(hkl_list), len(axes)):
@@ -143,7 +159,7 @@ def plot_scherrer_evolution_by_peak(
     
     if all_y_values:
         y_min = 0
-        y_max = max(all_y_values) * 1.1
+        y_max = 400  # Explicitly requested by user
         for ax in axes[:len(hkl_list)]:
             ax.set_ylim(y_min, y_max)
 
@@ -162,7 +178,7 @@ def plot_scherrer_evolution_by_peak(
 def plot_scherrer_by_concentration(
     data: List[Dict[str, Any]],
     output_path: Optional[str] = None,
-    dpi: int = 2400,
+    dpi: int = 1200,
     format: str = "png",
     show: bool = True,
     figsize: Tuple[float, float] = (11, 11), # Square figure to help subplots be square
@@ -230,8 +246,26 @@ def plot_scherrer_by_concentration(
                             x_values.append(time_val)
                             y_values.append(val)
             
-            if x_values:
+                # Define styles using standard Miller Index notation (111)
+                # Matches style in compare_ka_methods.py
+                
+                # Format: (1, 1, 1) -> "(111)"
+                hkl_label = f"({hkl[0]}{hkl[1]}{hkl[2]})"
+                
                 color = hkl_color_map[hkl]
+                
+                marker_map = {
+                    '(111)': 'o', '(200)': 's', '(220)': '^', 
+                    '(311)': 'D', '(222)': 'v'
+                }
+                linestyle_map = {
+                    '(111)': '-', '(200)': '--', '(220)': ':', 
+                    '(311)': '-.', '(222)': '-'
+                }
+                
+                marker = marker_map.get(hkl_label, 'o')
+                linestyle = linestyle_map.get(hkl_label, '-')
+
                 # Sort by time
                 sorted_indices = np.argsort(x_values)
                 x_sorted = np.array(x_values)[sorted_indices]
@@ -248,10 +282,10 @@ def plot_scherrer_by_concentration(
                 if len(y_errs) == len(x_values):
                     e_sorted = np.array(y_errs)[sorted_indices]
                     
-                    ax.errorbar(x_sorted, y_sorted, yerr=e_sorted, fmt='o', c=color, markersize=8,
+                    ax.errorbar(x_sorted, y_sorted, yerr=e_sorted, fmt=marker, c=color, markersize=7,
                                 ecolor=color, elinewidth=1.5, capsize=4, alpha=0.8,
-                                markeredgecolor='black', markeredgewidth=0.5, label=hkl)
-                    ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle='-', linewidth=2.0)
+                                markeredgecolor='black', markeredgewidth=0.5, label=hkl_label)
+                    ax.plot(x_sorted, y_sorted, c=color, alpha=0.7, linestyle=linestyle, linewidth=2.0)
         
         ax.set_xlabel('Annealing Time (hours)')
         ax.set_ylabel('Crystallite Size (nm)')
@@ -266,8 +300,8 @@ def plot_scherrer_by_concentration(
         ax.axhline(y=205, color='red', linestyle='--', alpha=0.5, linewidth=1.5)
         
         ax.legend(loc='upper right', fontsize=8)
-        ax.set_ylim(y_min, y_max)
-        ax.grid(True, alpha=0.3)
+        ax.set_ylim(0, 400)  # Explicitly requested by user
+        ax.grid(True, alpha=0.3, linestyle=':')
         ax.set_box_aspect(1)  # Make subplot square
     
     # Hide unused axes
@@ -275,7 +309,16 @@ def plot_scherrer_by_concentration(
         axes[idx].set_visible(False)
     
     fig.suptitle('Scherrer Size Evolution by Concentration', fontsize=16, fontweight='bold', y=1.02)
-    plt.tight_layout()
+    # Add Physical Limitation Footnote
+    LIMITATION_NOTE = (
+        "Note: Size > 200 nm approaches instrumental resolution limit (FWHM ≈ 0.04°).\n"
+        "註：晶粒尺寸 > 200 nm 接近儀器解析極限，數值僅供趨勢參考。"
+    )
+    fig.text(0.5, 0.01, LIMITATION_NOTE, ha='center', va='bottom', 
+             fontsize=10, style='italic', color='#555555', 
+             bbox=dict(facecolor='#f0f0f0', alpha=0.5, edgecolor='none', pad=5))
+
+    plt.tight_layout(rect=[0, 0.05, 1, 0.96]) # Adjust for footer
     
     if output_path:
         save_figure(fig, output_path, dpi=dpi, format=format)

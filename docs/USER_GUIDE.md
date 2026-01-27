@@ -6,7 +6,7 @@ Version: 0.2.0
 
 ---
 
-## 📖 Table of Contents
+## Table of Contents
 
 1. [Introduction](#introduction)
 2. [Installation](#installation)
@@ -39,12 +39,12 @@ AXCSAS (Advanced XRD Crystallite Size Analysis System) is a Python package for a
 
 ### Key Features
 
-✅ Automated peak detection and Pseudo-Voigt fitting  
-✅ Instrumental broadening correction (Caglioti equation)  
-✅ Direction-dependent Scherrer K values  
-✅ Comprehensive texture analysis  
-✅ Publication-quality plots (2400 DPI)  
-✅ Batch processing support
+- Automated peak detection and Pseudo-Voigt fitting  
+- Instrumental broadening correction (Caglioti equation)  
+- Direction-dependent Scherrer K values  
+- Comprehensive texture analysis  
+- Publication-quality plots (2400 DPI)  
+- Batch processing support
 
 ---
 
@@ -268,9 +268,9 @@ for tc_detail in texture_result.tc_details:
     print(f"{hkl_str}: TC={tc_detail.tc_value:.2f} - {tc_detail.orientation_type.value}")
 
 if texture_result.is_random:
-    print("\n✓ Random orientation (no preferred texture)")
+    print("\n[INFO] Random orientation (no preferred texture)")
 else:
-    print(f"\n⚠ Preferred orientation along {texture_result.dominant_hkl}")
+    print(f"\n[WARNING] Preferred orientation along {texture_result.dominant_hkl}")
 ```
 
 ---
@@ -434,19 +434,19 @@ result = pipeline.analyze("sample.txt")
 ### Tips for Best Results
 
 **Data Quality**:
-- ✅ Use slow scan speed (0.02-0.05°/step)
-- ✅ Ensure good counting statistics (>1000 counts at peak)
-- ✅ Minimize background (proper sample preparation)
+- Use slow scan speed (0.02-0.05 deg/step)
+- Ensure good counting statistics (>1000 counts at peak)
+- Minimize background (proper sample preparation)
 
 **Sample Preparation**:
-- ✅ Flat, smooth surface
-- ✅ Sufficient thickness (>1 μm for Cu)
-- ✅ Avoid preferred orientation (for powder XRD)
+- Flat, smooth surface
+- Sufficient thickness (>1 um for Cu)
+- Avoid preferred orientation (for powder XRD)
 
 **Analysis Parameters**:
-- ✅ Always calibrate with LaB6 standard first
-- ✅ Use integrated area (not peak height) for texture
-- ✅ Check R² values (should be >0.95)
+- Always calibrate with LaB6 standard first
+- Use integrated area (not peak height) for texture
+- Check R-squared values (should be >0.95)
 
 ---
 

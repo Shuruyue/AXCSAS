@@ -96,6 +96,13 @@ validation:
 output:
   results_format: "csv"        # Options: "csv", "json", "xlsx"
   plot_format: "png"           # Options: "png", "svg", "pdf"
-  plot_dpi: 300
+  plot_dpi: 1200
   generate_report: true
   report_format: "markdown"    # Options: "markdown", "pdf"
+  
+  # Standardized Output Paths
+  paths:
+    root: "outputs"
+    plots: "outputs/plots"
+    reports: "outputs/reports"
+    cache: "outputs/cache"

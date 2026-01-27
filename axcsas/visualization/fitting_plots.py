@@ -161,12 +161,12 @@ def plot_doublet_comparison(
             linewidth=2, label='Doublet fit')
 
     # Mark Kα1 and Kα2 positions
-    ax1.axvline(x=ka1_center, color='green', linestyle=':', alpha=0.7)
-    ax1.axvline(x=ka2_center, color='purple', linestyle=':', alpha=0.7)
+    ax1.axvline(x=ka1_center, color='gray', linestyle='--', alpha=0.7)
+    ax1.axvline(x=ka2_center, color='gray', linestyle=':', alpha=0.7)
     ax1.text(ka1_center, ax1.get_ylim()[1] * 0.95, 'Kα₁', fontsize=10,
-            ha='center', color='green')
+            ha='center', color='gray')
     ax1.text(ka2_center, ax1.get_ylim()[1] * 0.9, 'Kα₂', fontsize=10,
-            ha='center', color='purple')
+            ha='center', color='gray')
 
     ax1.set_xlabel('2θ (degrees)')
     ax1.set_ylabel('Intensity')

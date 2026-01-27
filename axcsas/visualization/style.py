@@ -18,48 +18,63 @@ AXCSAS_STYLE: Dict[str, Any] = {
     'figure.figsize': (10, 6),
     'figure.dpi': 100,
     'figure.facecolor': 'white',
-    'figure.edgecolor': 'white',
+    # 'figure.edgecolor': 'black', # Some journals prefer this
 
-    # Save settings: 2400 DPI for journal publication
-    # Reference: Nature/Science guidelines (300-600 DPI minimum)
-    'savefig.dpi': 2400,
+    # Save settings: 600 DPI for high-quality academic output (Safe for viewers)
+    'savefig.dpi': 600,
     'savefig.facecolor': 'white',
     'savefig.edgecolor': 'white',
     'savefig.bbox': 'tight',
 
-    # Font settings
-    'font.family': 'sans-serif',
-    'font.size': 12,
+    # Font settings - Strictly Times New Roman / Serif
+    'font.family': 'serif',
+    'font.serif': ['Times New Roman', 'DejaVu Serif', 'Liberation Serif'],
+    'font.size': 14,
+    'text.usetex': False,  # Avoid external dependency unless requested
+    'mathtext.fontset': 'stix', # LaTeX-like math font
 
-    # Axes settings
-    'axes.labelsize': 14,
-    'axes.titlesize': 16,
+    # Axes settings - Box style
+    'axes.labelsize': 16,
+    'axes.titlesize': 18,
     'axes.titleweight': 'bold',
-    'axes.grid': True,
-    'axes.spines.top': False,
-    'axes.spines.right': False,
-    'axes.linewidth': 1.2,
+    'axes.grid': False,      # Academic standard: usually no grid or very subtle
+    'axes.spines.top': True, # Box style
+    'axes.spines.right': True,
+    'axes.linewidth': 1.5,
+    'axes.edgecolor': 'black',
 
-    # Grid settings
+    # Grid settings (if enabled manually)
     'grid.alpha': 0.3,
-    'grid.linestyle': '--',
-    'grid.linewidth': 0.8,
+    'grid.linestyle': ':',
+    'grid.linewidth': 0.5,
 
     # Legend settings
-    'legend.fontsize': 11,
-    'legend.framealpha': 0.9,
-    'legend.edgecolor': 'gray',
-    'legend.fancybox': True,
+    'legend.fontsize': 12,
+    'legend.frameon': True,
+    'legend.framealpha': 1.0, # Opaque
+    'legend.edgecolor': 'black',
+    'legend.fancybox': False, # Square corners
 
-    # Tick settings
-    'xtick.labelsize': 11,
-    'ytick.labelsize': 11,
-    'xtick.major.size': 5,
-    'ytick.major.size': 5,
+    # Tick settings - Inward ticks are standard in physics/materials
+    'xtick.direction': 'in',
+    'ytick.direction': 'in',
+    'xtick.top': True,       # Ticks on top
+    'ytick.right': True,     # Ticks on right
+    'xtick.labelsize': 14,
+    'ytick.labelsize': 14,
+    'xtick.major.size': 6,
+    'ytick.major.size': 6,
+    'xtick.major.width': 1.2,
+    'ytick.major.width': 1.2,
+    'xtick.minor.visible': True,
+    'ytick.minor.visible': True,
+    'xtick.minor.size': 3,
+    'ytick.minor.size': 3,
 
     # Line settings
-    'lines.linewidth': 2,
+    'lines.linewidth': 2.0,
     'lines.markersize': 8,
+    'lines.markeredgewidth': 1.0,
 }
 
 

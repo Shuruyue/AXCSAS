@@ -53,191 +53,7 @@ PEAK_POSITIONS = get_standard_peaks()  # Returns (111), (200), (220)
 PEAK_LABELS = [f"({h[0]}{h[1]}{h[2]})" for h in PEAK_POSITIONS.keys()]
 
 
-def fit_peak_with_diagnosis(
-    two_theta: np.ndarray,
-    intensity: np.ndarray,
-    expected_center: float,
-    window: float = 2.5,
-    use_doublet: bool = False  # Pseudo-Voigt for reliability (DoubletFitter has environment issues)
-) -> Dict:
-    """
-    Fit a single peak using Kα doublet model and return detailed diagnosis info.
-    使用 Kα 雙峰模型擬合單峰並返回詳細診斷資訊。
-    
-    Returns dict with:
-        - success: bool
-        - center: fitted Kα₁ peak center
-        - center_ka2: fitted Kα₂ peak center
-        - amplitude: fitted amplitude
-        - fwhm: fitted FWHM
-        - eta: mixing parameter
-        - r_squared: goodness of fit
-        - theta_range: x data
-        - int_range: y data (original)
-        - fitted_curve: y data (fitted)
-    """
-    result = {
-        'success': False,
-        'center': np.nan,
-        'center_ka2': np.nan,
-        'amplitude': np.nan,
-        'fwhm': np.nan,
-        'eta': np.nan,
-        'r_squared': np.nan,
-        'theta_range': None,
-        'int_range': None,
-        'fitted_curve': None,
-        'method': 'doublet' if use_doublet else 'pseudo-voigt'
-    }
-    
-    # Select range
-    mask = (two_theta >= expected_center - window) & (two_theta <= expected_center + window)
-    if not np.any(mask):
-        return result
-    
-    theta_range = two_theta[mask]
-    int_range = intensity[mask]
-    
-    result['theta_range'] = theta_range
-    result['int_range'] = int_range
-    
-    # Find maximum for initial guess
-    idx_max = np.argmax(int_range)
-    peak_theta = theta_range[idx_max]
-    peak_int = int_range[idx_max]
-    
-    if peak_int < 50:
-        return result
-    
-    # Estimate initial FWHM
-    half_max = peak_int / 2
-    left_idx = idx_max
-    while left_idx > 0 and int_range[left_idx] > half_max:
-        left_idx -= 1
-    right_idx = idx_max
-    while right_idx < len(int_range) - 1 and int_range[right_idx] > half_max:
-        right_idx += 1
-    initial_fwhm = max(theta_range[right_idx] - theta_range[left_idx], 0.1)
-    
-    try:
-        if use_doublet:
-            # Use Kα doublet fitting with timeout protection
-            import signal
-            
-            fitter = DoubletFitter(max_iterations=5000)
-            fit_result = fitter.fit(theta_range, int_range, expected_center, initial_fwhm)
-            
-            if fit_result.success and fit_result.r_squared > 0.8:
-                result['success'] = True
-                result['center'] = fit_result.center_ka1
-                result['center_ka2'] = fit_result.center_ka2
-                result['amplitude'] = fit_result.amplitude_ka1
-                result['fwhm'] = fit_result.fwhm
-                result['fwhm_error'] = getattr(fit_result, 'fwhm_error', 0.0) # Get error or default to 0
-                result['eta'] = fit_result.eta
-                result['r_squared'] = fit_result.r_squared
-                result['fitted_curve'] = fit_result.fitted_curve
-                result['method'] = 'doublet'
-            else:
-                # Fallback to Pseudo-Voigt if doublet fitting fails or has low R²
-                use_doublet = False
-        
-        if not use_doublet or not result['success']:
-            # Rigorous Pseudo-Voigt fitting with polynomial background
-            from scipy.optimize import least_squares
-            
-            # Estimate polynomial background (quadratic)
-            n_edge = max(5, len(theta_range) // 8)
-            bg_x = np.concatenate([theta_range[:n_edge], theta_range[-n_edge:]])
-            bg_y = np.concatenate([int_range[:n_edge], int_range[-n_edge:]])
-            bg_coeffs = np.polyfit(bg_x, bg_y, 2)  # Quadratic background
-            
-            # Model: Pseudo-Voigt + quadratic background
-            def enhanced_pv_model(x, center, amplitude, fwhm, eta, a2, a1, a0):
-                pv = PseudoVoigt.profile(x, center, amplitude, fwhm, np.clip(eta, 0, 1))
-                background = a2 * x**2 + a1 * x + a0
-                return pv + background
-            
-            def residual(params):
-                return int_range - enhanced_pv_model(theta_range, *params)
-            
-            # Multi-start optimization for robustness
-            best_r2 = -1
-            best_params = None
-            best_fitted = None
-            
-            # Expanded multi-start optimization for R² ≥ 0.995 target
-            # Try multiple initial eta and amplitude values
-            for eta_init in [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
-                x0 = np.array([peak_theta, peak_int * 0.9, initial_fwhm, eta_init, 
-                              bg_coeffs[0], bg_coeffs[1], bg_coeffs[2]])
-                
-                lb = np.array([theta_range.min(), 10, 0.03, 0.0, -np.inf, -np.inf, -np.inf])
-                ub = np.array([theta_range.max(), peak_int * 1.5, 3.0, 1.0, np.inf, np.inf, np.inf])
-                
-                try:
-                    opt_result = least_squares(residual, x0, bounds=(lb, ub), 
-                                               max_nfev=5000, ftol=1e-12, xtol=1e-12, gtol=1e-12)
-                    
-                    if opt_result.success or opt_result.status >= 1:
-                        fitted = enhanced_pv_model(theta_range, *opt_result.x)
-                        residuals = int_range - fitted
-                        ss_res = np.sum(residuals**2)
-                        ss_tot = np.sum((int_range - np.mean(int_range))**2)
-                        r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0
-                        
-                        # Calculate reduced chi-squared and parameter uncertainties
-                        n_data = len(int_range)
-                        n_params = len(opt_result.x)
-                        dof = n_data - n_params  # Degrees of freedom
-                        
-                        # Estimate variance and chi-squared
-                        variance = ss_res / dof if dof > 0 else ss_res
-                        chi2_red = ss_res / (dof * variance) if dof > 0 else 1.0
-                        
-                        # Parameter uncertainties from Jacobian
-                        try:
-                            # Covariance matrix from Jacobian: cov = (J^T J)^-1 * variance
-                            J = opt_result.jac
-                            cov = np.linalg.inv(J.T @ J) * variance
-                            param_errors = np.sqrt(np.diag(cov))
-                        except (np.linalg.LinAlgError, ValueError):
-                            # Fallback if covariance calculation fails
-                            param_errors = np.zeros(n_params)
-                        
-                        if r2 > best_r2:
-                            best_r2 = r2
-                            best_params = opt_result.x
-                            best_fitted = fitted
-                            best_errors = param_errors
-                            best_chi2_red = chi2_red
-                            best_dof = dof
-                except Exception:
-                    continue
-            
-            # Accept results with R² > 0.85, but flag low quality if < 0.995
-            if best_params is not None and best_r2 > 0.85:
-                result['success'] = True
-                result['center'] = best_params[0]
-                result['center_err'] = best_errors[0] if best_errors[0] > 0 else 0.001
-                result['amplitude'] = best_params[1]
-                result['amplitude_err'] = best_errors[1]
-                result['fwhm'] = best_params[2]
-                result['fwhm_err'] = best_errors[2] if best_errors[2] > 0 else 0.0001
-                result['eta'] = best_params[3]
-                result['eta_err'] = best_errors[3]
-                result['r_squared'] = best_r2
-                result['chi2_red'] = best_chi2_red
-                result['dof'] = best_dof
-                result['method'] = 'enhanced-pv'
-                result['fitted_curve'] = best_fitted
-                # Flag low quality fits
-                quality_target = 0.995
-                result['low_quality'] = best_r2 < quality_target
-    except Exception as e:
-        result['error'] = str(e)
-    
-    return result
+from axcsas.fitting.peak_fitter import fit_peak_with_diagnosis
 
 
 def generate_sample_fitting_plot(
@@ -312,33 +128,68 @@ def generate_sample_fitting_plot(
                 fwhm = fit_result['fwhm']
                 amp = fit_result['amplitude']
                 
-                # Vertical lines at Kα₁ and Kα₂ centers
-                ax.axvline(x=center, color='blue', linestyle='--', alpha=0.6, 
+                # Vertical lines at Kα₁ and Kα₂ centers (gray, different dash styles)
+                ax.axvline(x=center, color='gray', linestyle='--', alpha=0.7, 
                           linewidth=1.0, label=f'Kα₁={center:.3f}°')
                 if not np.isnan(center_ka2):
-                    ax.axvline(x=center_ka2, color='orange', linestyle='--', alpha=0.6,
+                    ax.axvline(x=center_ka2, color='gray', linestyle=':', alpha=0.7,
                               linewidth=1.0, label=f'Kα₂={center_ka2:.3f}°')
+                    
+                    # Plot separate Kα₁ and Kα₂ components if doublet method used
+                    if fit_result.get('method') in ['doublet', 'doublet-true-voigt']:
+                         from axcsas.fitting.pseudo_voigt import TrueVoigt
+                         
+                         eta_val = fit_result['eta']
+                         amp_ka1 = fit_result['amplitude']
+                         amp_ka2 = amp_ka1 * 0.5 # Approximation
+                         fwhm_val = fit_result['fwhm']
+                         
+                         # Get X range
+                         x_vals = fit_result['theta_range']
+                         
+                         # Recover True Voigt params from FWHM/Eta
+                         # This allows plotting consistent with the reported metrics
+                         # Note: params_from_fwhm is an estimation but consistent with the fitting pipeline
+                         sigma, gamma = TrueVoigt.params_from_fwhm(fwhm_val, eta_val)
+                         
+                         # Calculate profiles using True Voigt
+                         y_ka1 = TrueVoigt.profile(x_vals, center, amp_ka1, sigma, gamma)
+                         y_ka2 = TrueVoigt.profile(x_vals, center_ka2, amp_ka2, sigma, gamma)
+                         
+                         # Estimate background from fitted_curve - (ka1 + ka2)
+                         y_total = fit_result['fitted_curve']
+                         y_bg = y_total - (y_ka1 + y_ka2)
+                         
+                         # Plot components with background added (stacked-ish)
+                         # User requested uniform gray style, and implicit legend association
+                         # Both set to nolegend to avoid redundancy with the vertical line labels
+                         # Correction: Match linestyle to vertical lines (Ka1=dashed, Ka2=dotted)
+                         ax.plot(x_vals, y_ka1 + y_bg, color='gray', linestyle='--', linewidth=1.0, alpha=0.5, label='_nolegend_')
+                         ax.plot(x_vals, y_ka2 + y_bg, color='gray', linestyle=':', linewidth=1.0, alpha=0.5, label='_nolegend_')
                 
-                # FWHM indicator
-                half_max = amp / 2 + np.min(fit_result['fitted_curve'])
-                ax.hlines(y=half_max, xmin=center - fwhm/2, xmax=center + fwhm/2,
-                         color='green', linewidth=1.5, label=f'FWHM={fwhm:.4f}°')
-                # Get uncertainties (with fallbacks)
-                center_err = fit_result.get('center_err', 0.001)
-                fwhm_err = fit_result.get('fwhm_err', 0.0001)
-                eta_err = fit_result.get('eta_err', 0.01)
-                chi2_red = fit_result.get('chi2_red', 1.0)
+                # FWHM indicator (muted red)
+                intensity_at_half_max = amp / 2 + np.min(fit_result['fitted_curve'])
+                ax.hlines(y=intensity_at_half_max, xmin=center - fwhm/2, xmax=center + fwhm/2,
+                          color='#C44E52', linewidth=1.5, label=f'FWHM={fwhm:.4f}°')
+                # Get uncertainties - NO misleading defaults! Use NaN if calculation failed
+                center_err = fit_result.get('center_err', np.nan)
+                fwhm_err = fit_result.get('fwhm_err', np.nan)
+                eta_err = fit_result.get('eta_err', np.nan)
+                chi2_red = fit_result.get('chi2_red', np.nan)  # ← Changed from 1.0
                 r2 = fit_result['r_squared']
                 eta = fit_result['eta']
                 low_quality = fit_result.get('low_quality', False)
                 
                 # Info text box with uncertainties
-                # Add warning if R² < 0.995
-                quality_warning = "⚠️ R² < 0.995\n" if low_quality else ""
+                # Add prominent warning if low quality fit
+                if low_quality:
+                    quality_warning = "⚠️ R² < 0.995\n"
+                else:
+                    quality_warning = ""
+                
                 info_text = (
                     f"{quality_warning}"
                     f"R² = {r2:.4f}\n"
-                    f"χ²ᵣₑₐ = {chi2_red:.3f}\n"
                     f"2θ = {center:.3f}° ± {center_err:.3f}°\n"
                     f"FWHM = {fwhm:.4f}° ± {fwhm_err:.4f}°\n"
                     f"η = {eta:.3f} ± {eta_err:.3f}"
@@ -348,7 +199,7 @@ def generate_sample_fitting_plot(
                 box_color = 'orange' if low_quality else 'white'
                 edge_color = 'red' if low_quality else 'gray'
                 ax.text(0.02, 0.98, info_text, transform=ax.transAxes,
-                       fontsize=9, verticalalignment='top', family='monospace',
+                       fontsize=9, verticalalignment='top', family='serif',
                        bbox=dict(boxstyle='round', facecolor=box_color, alpha=0.9, edgecolor=edge_color))
                 
                 peaks_info.append({
@@ -382,7 +233,7 @@ def generate_sample_fitting_plot(
     
     # Save plot using visualization module
     output_path = output_dir / f'{sample_name}_fitting.png'
-    save_figure(fig, str(output_path), dpi=2400)
+    save_figure(fig, str(output_path), dpi=1200)
     plt.close()
     
     return peaks_info
@@ -418,7 +269,7 @@ def main():
                 'filename': filepath.name,
                 'peaks': result
             })
-            print(f"  ✓ Saved (DPI: 1000)")
+            print(f"  [OK] Saved (DPI: 1000)")
         else:
             print(f"  ✗ Failed")
     
